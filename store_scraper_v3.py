@@ -92,16 +92,128 @@ PREFECTURES = [
 ]
 
 
+# 郵便番号上位3桁 → 都道府県マッピング
+POSTAL_PREF_MAP = {
+    # 北海道 (001-099)
+    **{f"{i:03d}": "北海道" for i in range(1, 100)},
+    # 青森県 (030-039)
+    **{f"{i:03d}": "青森県" for i in range(30, 40)},
+    # 岩手県 (020-029)
+    **{f"{i:03d}": "岩手県" for i in range(20, 30)},
+    # 宮城県 (980-989)
+    **{f"{i:03d}": "宮城県" for i in range(980, 990)},
+    # 秋田県 (010-019)
+    **{f"{i:03d}": "秋田県" for i in range(10, 20)},
+    # 山形県 (990-999)
+    **{f"{i:03d}": "山形県" for i in range(990, 1000)},
+    # 福島県 (960-979)
+    **{f"{i:03d}": "福島県" for i in range(960, 980)},
+    # 茨城県 (300-319)
+    **{f"{i:03d}": "茨城県" for i in range(300, 320)},
+    # 栃木県 (320-329)
+    **{f"{i:03d}": "栃木県" for i in range(320, 330)},
+    # 群馬県 (370-379)
+    **{f"{i:03d}": "群馬県" for i in range(370, 380)},
+    # 埼玉県 (330-369)
+    **{f"{i:03d}": "埼玉県" for i in range(330, 370)},
+    # 千葉県 (260-299)
+    **{f"{i:03d}": "千葉県" for i in range(260, 300)},
+    # 東京都 (100-209)
+    **{f"{i:03d}": "東京都" for i in range(100, 210)},
+    # 神奈川県 (210-259)
+    **{f"{i:03d}": "神奈川県" for i in range(210, 260)},
+    # 新潟県 (940-959)
+    **{f"{i:03d}": "新潟県" for i in range(940, 960)},
+    # 富山県 (930-939)
+    **{f"{i:03d}": "富山県" for i in range(930, 940)},
+    # 石川県 (920-929)
+    **{f"{i:03d}": "石川県" for i in range(920, 930)},
+    # 福井県 (910-919)
+    **{f"{i:03d}": "福井県" for i in range(910, 920)},
+    # 山梨県 (400-409)
+    **{f"{i:03d}": "山梨県" for i in range(400, 410)},
+    # 長野県 (380-399)
+    **{f"{i:03d}": "長野県" for i in range(380, 400)},
+    # 岐阜県 (500-509)
+    **{f"{i:03d}": "岐阜県" for i in range(500, 510)},
+    # 静岡県 (410-439)
+    **{f"{i:03d}": "静岡県" for i in range(410, 440)},
+    # 愛知県 (440-499)
+    **{f"{i:03d}": "愛知県" for i in range(440, 500)},
+    # 三重県 (510-519)
+    **{f"{i:03d}": "三重県" for i in range(510, 520)},
+    # 滋賀県 (520-529)
+    **{f"{i:03d}": "滋賀県" for i in range(520, 530)},
+    # 京都府 (600-629)
+    **{f"{i:03d}": "京都府" for i in range(600, 630)},
+    # 大阪府 (530-599)
+    **{f"{i:03d}": "大阪府" for i in range(530, 600)},
+    # 兵庫県 (650-679)
+    **{f"{i:03d}": "兵庫県" for i in range(650, 680)},
+    # 奈良県 (630-639)
+    **{f"{i:03d}": "奈良県" for i in range(630, 640)},
+    # 和歌山県 (640-649)
+    **{f"{i:03d}": "和歌山県" for i in range(640, 650)},
+    # 鳥取県 (680-689)
+    **{f"{i:03d}": "鳥取県" for i in range(680, 690)},
+    # 島根県 (690-699)
+    **{f"{i:03d}": "島根県" for i in range(690, 700)},
+    # 岡山県 (700-719)
+    **{f"{i:03d}": "岡山県" for i in range(700, 720)},
+    # 広島県 (720-739)
+    **{f"{i:03d}": "広島県" for i in range(720, 740)},
+    # 山口県 (740-759)
+    **{f"{i:03d}": "山口県" for i in range(740, 760)},
+    # 徳島県 (770-779)
+    **{f"{i:03d}": "徳島県" for i in range(770, 780)},
+    # 香川県 (760-769)
+    **{f"{i:03d}": "香川県" for i in range(760, 770)},
+    # 愛媛県 (790-799)
+    **{f"{i:03d}": "愛媛県" for i in range(790, 800)},
+    # 高知県 (780-789)
+    **{f"{i:03d}": "高知県" for i in range(780, 790)},
+    # 福岡県 (800-839)
+    **{f"{i:03d}": "福岡県" for i in range(800, 840)},
+    # 佐賀県 (840-849)
+    **{f"{i:03d}": "佐賀県" for i in range(840, 850)},
+    # 長崎県 (850-859)
+    **{f"{i:03d}": "長崎県" for i in range(850, 860)},
+    # 熊本県 (860-869)
+    **{f"{i:03d}": "熊本県" for i in range(860, 870)},
+    # 大分県 (870-879)
+    **{f"{i:03d}": "大分県" for i in range(870, 880)},
+    # 宮崎県 (880-889)
+    **{f"{i:03d}": "宮崎県" for i in range(880, 890)},
+    # 鹿児島県 (890-899)
+    **{f"{i:03d}": "鹿児島県" for i in range(890, 900)},
+    # 沖縄県 (900-909)
+    **{f"{i:03d}": "沖縄県" for i in range(900, 910)},
+}
+
+
 def extract_prefecture(text: str) -> str:
-    """テキストから都道府県を抽出"""
+    """テキストから都道府県を抽出（郵便番号からの推測付き）"""
+    if not text:
+        return ""
+
+    # 方法1: 都道府県名から直接抽出
     for pref in PREFECTURES:
         if pref in text:
             return pref
-    # 「都」「道」「府」「県」なしの場合
+
+    # 方法2: 「都」「道」「府」「県」なしの場合
     short_names = [p.rstrip("都道府県") for p in PREFECTURES]
     for i, short in enumerate(short_names):
-        if short in text:
+        if short in text and len(short) >= 2:
             return PREFECTURES[i]
+
+    # 方法3: 郵便番号から推測
+    postal_match = re.search(r"〒?(\d{3})-?(\d{4})", text)
+    if postal_match:
+        prefix = postal_match.group(1)
+        if prefix in POSTAL_PREF_MAP:
+            return POSTAL_PREF_MAP[prefix]
+
     return ""
 
 
@@ -684,18 +796,47 @@ class StaticHTMLStrategy(ScrapingStrategy):
         if name_elem:
             data["store_name"] = name_elem.get_text(strip=True)
 
-        # 住所
+        # 住所（複数階層対応で完全な住所を取得）
         address_elem = card.find(string=re.compile(r'〒'))
         if address_elem:
-            # 親要素のテキストを取得
-            parent = address_elem.parent
-            if parent:
-                data["address"] = parent.get_text(strip=True)[:100]
+            # 親を複数階層辿って、完全な住所を取得
+            current = address_elem.parent
+            full_address = ""
+            for _ in range(3):  # 最大3階層まで辿る
+                if current:
+                    text = current.get_text(separator=' ', strip=True)
+                    # 住所として妥当か判定（郵便番号 + 都道府県名を含む）
+                    if re.search(r'〒[\d\-]+\s*.+[都道府県]', text):
+                        full_address = text
+                        break
+                    # 郵便番号と住所テキストが一定以上の長さ
+                    if '〒' in text and len(text) > 15:
+                        full_address = text
+                        break
+                    current = current.parent if hasattr(current, 'parent') else None
+            
+            if full_address:
+                # 住所部分だけを抽出（電話番号や営業時間の前まで）
+                # パターン: 〒XXX-XXXX + 都道府県 + 市区町村 + 番地
+                addr_match = re.search(r'(〒[\d\-]+\s*[^\d]{5,80}?)(?:\s*(?:TEL|tel|電話|営業|定休|[0-9]{2,4}[\-\(]))', full_address)
+                if addr_match:
+                    data["address"] = addr_match.group(1).strip()
+                else:
+                    # 住所が長すぎる場合は適度な長さで切る
+                    data["address"] = full_address[:100].strip()
+            else:
+                # フォールバック: 直接の親要素を使用
+                parent = address_elem.parent
+                if parent:
+                    data["address"] = parent.get_text(separator=' ', strip=True)[:100]
         else:
             # 住所クラスを探す
-            addr_elem = card.find(class_=re.compile(r"address|addr", re.IGNORECASE))
-            if addr_elem:
-                data["address"] = addr_elem.get_text(strip=True)[:100]
+            addr_classes = [r'address', r'addr', r'-addr', r'shop.*addr']
+            for cls_pattern in addr_classes:
+                addr_elem = card.find(class_=re.compile(cls_pattern, re.IGNORECASE))
+                if addr_elem:
+                    data["address"] = addr_elem.get_text(separator=' ', strip=True)[:100]
+                    break
 
         # 電話番号
         tel_link = card.find("a", href=re.compile(r"tel:"))
@@ -737,6 +878,20 @@ class StaticHTMLStrategy(ScrapingStrategy):
             r"教室一覧",
             r"^(北海道|東北|関東|中部|関西|中国|四国|九州|甲信越)$",
             r"^\d+件$",  # "123件" のような結果数
+            # 宣伝文句・キャッチコピー
+            r"魔法",
+            r"恐るべし",
+            r"おトク",
+            r"キャンペーン",
+            r"フェア",
+            r"セール",
+            r"お知らせ",
+            r"ニュース",
+            r"新着",
+            r"^お問い?合わせ",
+            r"^アクセス$",
+            r"^詳細$",
+            r"^もっと見る",
         ]
 
         seen = set()
