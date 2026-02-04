@@ -20,6 +20,7 @@ streamlit run app_v4.py
 import asyncio
 import io
 import os
+import subprocess
 import sys
 from dataclasses import asdict
 from datetime import datetime
@@ -620,7 +621,10 @@ def main():
         """)
 
         if st.button("📂 v3 アプリを起動"):
-            os.system("start cmd /c streamlit run app_v3.py")
+            subprocess.Popen(
+                ["streamlit", "run", "app_v3.py"],
+                creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0,
+            )
             st.success("v3 アプリを起動しました")
 
 

@@ -54,8 +54,8 @@ from rich.table import Table
 # ====================================
 console = Console()
 
-# 環境変数読み込み
-load_dotenv(Path.home() / ".env.local")
+# 環境変数読み込み（override=True で .env.local を優先）
+load_dotenv(Path.home() / ".env.local", override=True)
 
 # Gemini API設定
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

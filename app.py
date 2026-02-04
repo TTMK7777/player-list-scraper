@@ -60,7 +60,7 @@ def init_apis():
     api_key = os.getenv("PERPLEXITY_API_KEY")
 
     if api_key:
-        st.sidebar.caption(f"🔑 Key: {api_key[:15]}...")
+        st.sidebar.caption("✅ Perplexity API: 設定済み")
 
     return api_key
 
