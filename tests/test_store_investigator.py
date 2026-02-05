@@ -254,7 +254,8 @@ class TestStoreInvestigator:
         assert result.investigation_mode == "ai"
         assert len(result.source_urls) == 2
         assert result.prefecture_distribution is not None
-        assert result.prefecture_distribution.get("東京都") == 25
+        # 新仕様: 店舗有無は True/False/None で表現
+        assert result.prefecture_distribution.get("東京都") is True  # 店舗あり
 
     @pytest.mark.asyncio
     async def test_investigate_ai_mode_low_confidence(self, mock_llm_client_low_confidence):

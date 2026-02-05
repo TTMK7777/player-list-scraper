@@ -220,6 +220,17 @@ class StoreInvestigator:
                 error_message=str(e)
             )
 
+    # 47都道府県リスト（プロンプト用）
+    PREFECTURES = [
+        "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+        "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+        "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+        "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+        "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+        "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+        "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+    ]
+
     def _build_ai_prompt(
         self,
         company_name: str,
@@ -231,20 +242,26 @@ class StoreInvestigator:
         url_hint = f"\n【公式サイト】{official_url}" if official_url else ""
         industry_hint = f"\n【業界】{industry}" if industry else ""
 
+        # 都道府県リストをJSON形式で生成
+        pref_template = ", ".join([f'"{p}": true/false/null' for p in self.PREFECTURES[:5]])
+
         return f"""
-「{company_name}」の店舗情報を調査してください。
+「{company_name}」の店舗展開状況を調査してください。
 {url_hint}{industry_hint}
 
 【調査項目】
 1. 現在の店舗総数（直営/FC区別可能なら分けて）
-2. 都道府県別の店舗分布（不明な場合は推測せず「不明」と回答）
-3. 情報の出典URL（公式サイト、IR資料等）
+2. **各都道府県への店舗展開の有無**（最重要）
+   - 店舗がある都道府県: true
+   - 店舗がない都道府県: false
+   - 不明な都道府県: null
+3. 情報の出典URL（公式サイト、IR資料、店舗一覧ページ等）
 
 【重要】
 - {current_year}年以降の最新情報を優先
-- 公式サイト、有価証券報告書、信頼できるソースのみを参照
-- 不明な情報は推測せず「不明」と明記
-- 情報源URLは必ず提供してください（検証用）
+- 公式サイトの「店舗一覧」「店舗検索」ページを必ず確認
+- 不明な場合は推測せず null と回答
+- 情報源URLは必ず提供（検証用）
 
 【出力形式】JSON
 ```json
@@ -252,14 +269,17 @@ class StoreInvestigator:
     "total_stores": 123,
     "direct_stores": 100,
     "franchise_stores": 23,
-    "prefecture_distribution": {{"北海道": 5, "東京都": 20, ...}},
+    "prefecture_presence": {{
+        {pref_template}, ...（全47都道府県）
+    }},
     "confidence": 0.85,
     "sources": ["https://..."],
     "notes": "補足情報（任意）"
 }}
 ```
 
-JSONのみを出力してください。都道府県別データが不明な場合は null としてください。
+**重要**: prefecture_presence は「店舗数」ではなく「店舗があるかどうか」を true/false/null で回答してください。
+全47都道府県について回答してください: {', '.join(self.PREFECTURES)}
 """
 
     def _parse_ai_response(
@@ -305,7 +325,28 @@ JSONのみを出力してください。都道府県別データが不明な場�
 
         direct_stores = data.get("direct_stores")
         franchise_stores = data.get("franchise_stores")
-        prefecture_distribution = data.get("prefecture_distribution")
+
+        # 都道府県データ（新形式: prefecture_presence / 旧形式: prefecture_distribution）
+        prefecture_presence = data.get("prefecture_presence") or data.get("prefecture_distribution")
+
+        # 都道府県別有無データを正規化
+        prefecture_distribution = None
+        if isinstance(prefecture_presence, dict):
+            prefecture_distribution = {}
+            for pref in self.PREFECTURES:
+                value = prefecture_presence.get(pref)
+                if value is True:
+                    prefecture_distribution[pref] = True
+                elif value is False:
+                    prefecture_distribution[pref] = False
+                elif isinstance(value, int) and value > 0:
+                    # 旧形式（数値）の場合は true に変換
+                    prefecture_distribution[pref] = True
+                elif isinstance(value, int) and value == 0:
+                    prefecture_distribution[pref] = False
+                else:
+                    prefecture_distribution[pref] = None  # 不明
+
         confidence = data.get("confidence", 0.5)
         sources = data.get("sources", [])
         notes = data.get("notes", "")

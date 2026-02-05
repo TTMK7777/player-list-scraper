@@ -361,10 +361,11 @@ def display_validation_table(results: list[ValidationResult]):
 def display_store_summary(results: list[StoreInvestigationResult]):
     """店舗調査結果サマリーを表示"""
 
-    total_stores = sum(r.total_stores for r in results)
-    high_conf = sum(1 for r in results if r.confidence >= 0.8)
-    medium_conf = sum(1 for r in results if 0.5 <= r.confidence < 0.8)
-    low_conf = sum(1 for r in results if r.confidence < 0.5)
+    # None対策: total_stores や confidence が None の場合に備える
+    total_stores = sum((r.total_stores or 0) for r in results)
+    high_conf = sum(1 for r in results if (r.confidence or 0) >= 0.8)
+    medium_conf = sum(1 for r in results if 0.5 <= (r.confidence or 0) < 0.8)
+    low_conf = sum(1 for r in results if (r.confidence or 0) < 0.5)
     need_verify = sum(1 for r in results if r.needs_verification)
 
     st.markdown("### 📊 店舗調査結果サマリー")
@@ -390,18 +391,18 @@ def display_store_summary(results: list[StoreInvestigationResult]):
 def display_store_table(results: list[StoreInvestigationResult]):
     """店舗調査結果テーブルを表示"""
 
-    # 信頼度でソート（低い順）
-    sorted_results = sorted(results, key=lambda r: (r.needs_verification, -r.confidence))
+    # 信頼度でソート（低い順）、None対策
+    sorted_results = sorted(results, key=lambda r: (r.needs_verification, -(r.confidence or 0)))
 
     data = []
     for result in sorted_results:
         data.append({
             "企業名": result.company_name,
-            "店舗数": result.total_stores,
+            "店舗数": result.total_stores or 0,
             "直営店": result.direct_stores if result.direct_stores is not None else "-",
             "FC店": result.franchise_stores if result.franchise_stores is not None else "-",
             "調査モード": result.investigation_mode,
-            "信頼度": f"{result.confidence * 100:.0f}%",
+            "信頼度": f"{(result.confidence or 0) * 100:.0f}%",
             "要確認": "⚠️" if result.needs_verification else "",
             "ソースURL": ", ".join(result.source_urls[:2]) if result.source_urls else "-",
         })
@@ -929,18 +930,20 @@ def main():
             st.subheader("📝 企業別詳細")
 
             for result in results:
-                with st.expander(f"{'⚠️' if result.needs_verification else '✅'} {result.company_name} - {result.total_stores}店舗"):
+                stores_display = result.total_stores or 0
+                conf_display = (result.confidence or 0) * 100
+                with st.expander(f"{'⚠️' if result.needs_verification else '✅'} {result.company_name} - {stores_display}店舗"):
                     col1, col2 = st.columns(2)
 
                     with col1:
                         st.write("**基本情報**")
-                        st.write(f"- 総店舗数: {result.total_stores}")
+                        st.write(f"- 総店舗数: {stores_display}")
                         if result.direct_stores is not None:
                             st.write(f"- 直営店: {result.direct_stores}")
                         if result.franchise_stores is not None:
                             st.write(f"- FC店: {result.franchise_stores}")
                         st.write(f"- 調査モード: {result.investigation_mode}")
-                        st.write(f"- 信頼度: {result.confidence * 100:.0f}%")
+                        st.write(f"- 信頼度: {conf_display:.0f}%")
 
                     with col2:
                         st.write("**情報ソース**")
