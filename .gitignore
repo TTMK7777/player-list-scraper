@@ -57,3 +57,6 @@ docs/*.xlsx
 # OS
 .DS_Store
 Thumbs.db
+
+# Archive (legacy versions)
+archive/

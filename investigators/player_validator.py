@@ -200,11 +200,39 @@ class PlayerValidator:
             )
             return {
                 "status_code": response.status_code,
-                "final_url": response.url,
+                "final_url": str(response.url),
                 "is_redirect": len(response.history) > 0,
             }
-        except Exception:
-            return {"status_code": 0, "final_url": url, "is_redirect": False}
+        except requests.exceptions.Timeout:
+            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "timeout"}
+        except requests.exceptions.SSLError:
+            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "ssl_error"}
+        except requests.exceptions.ConnectionError:
+            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "connection_error"}
+        except requests.exceptions.RequestException:
+            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "request_error"}
+
+    def _sanitize_input(self, text: str) -> str:
+        """
+        プロンプトインジェクション対策: ユーザー入力をサニタイズ
+
+        Args:
+            text: サニタイズ対象のテキスト
+
+        Returns:
+            サニタイズされたテキスト
+        """
+        if not text:
+            return ""
+        # 改行・タブを空白に置換
+        sanitized = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        # 連続する空白を1つに（re はファイル先頭でインポート済み）
+        sanitized = re.sub(r'\s+', ' ', sanitized)
+        # プロンプト区切り文字をエスケープ
+        sanitized = sanitized.replace('```', '`‵`')
+        sanitized = sanitized.replace('【', '[').replace('】', ']')
+        # 長さ制限（過剰な入力を防止）
+        return sanitized[:500].strip()
 
     async def _query_latest_info(
         self,
@@ -215,12 +243,18 @@ class PlayerValidator:
     ) -> str:
         """LLMに最新情報を問い合わせ"""
 
-        industry_context = f"（{industry}業界）" if industry else ""
-        company_context = f"（運営会社: {company_name}）" if company_name else ""
-        url_context = f"【公式URL】{official_url}" if official_url else ""
+        # 入力をサニタイズ（プロンプトインジェクション対策）
+        safe_player_name = self._sanitize_input(player_name)
+        safe_company_name = self._sanitize_input(company_name)
+        safe_industry = self._sanitize_input(industry)
+        safe_url = self._sanitize_input(official_url)
+
+        industry_context = f"（{safe_industry}業界）" if safe_industry else ""
+        company_context = f"（運営会社: {safe_company_name}）" if safe_company_name else ""
+        url_context = f"[公式URL] {safe_url}" if safe_url else ""
 
         prompt = f"""
-「{player_name}」{industry_context}{company_context}の最新情報を調査してください。
+「{safe_player_name}」{industry_context}{company_context}の最新情報を調査してください。
 
 {url_context}
 
@@ -327,7 +361,8 @@ class PlayerValidator:
         current_url = data.get("current_url", original_url) or original_url
         if url_status and url_status.get("is_redirect"):
             if url_status["final_url"] != original_url:
-                if ChangeType.URL_CHANGE not in [change_type]:
+                # URL変更がまだ検出されていない場合のみ追加
+                if change_type != ChangeType.URL_CHANGE:
                     changes.append(f"URLリダイレクト検出: {original_url} → {url_status['final_url']}")
 
         # ニュースサマリー

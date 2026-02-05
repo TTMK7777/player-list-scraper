@@ -22,9 +22,11 @@ import io
 import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -116,8 +118,16 @@ st.markdown("""
 # ====================================
 # セッション状態
 # ====================================
-def init_session_state():
-    """セッション状態の初期化"""
+def init_session_state() -> None:
+    """
+    Streamlit セッション状態を初期化する。
+
+    初期化される状態:
+        - players: アップロードされたプレイヤーリスト
+        - validation_results: 正誤チェック結果
+        - progress_logs: 進捗ログ
+        - is_running: 実行中フラグ
+    """
     if "players" not in st.session_state:
         st.session_state.players = []
     if "validation_results" not in st.session_state:
@@ -131,8 +141,14 @@ def init_session_state():
 # ====================================
 # API初期化
 # ====================================
-def init_apis():
-    """API設定の初期化と表示"""
+def init_apis() -> dict[str, bool]:
+    """
+    API設定を初期化し、利用可能なプロバイダーを返す。
+
+    Returns:
+        dict[str, bool]: プロバイダー名と利用可能性のマッピング
+            例: {"perplexity": True, "gemini": False}
+    """
     from dotenv import load_dotenv
     load_dotenv(Path.home() / ".env.local", override=True)
 
@@ -183,8 +199,21 @@ async def run_validation(
         status_container.success(f"✅ チェック完了: {len(results)}件")
         return results
 
+    except ValueError as e:
+        # API設定エラー
+        status_container.error(f"❌ API設定エラー: {str(e)}")
+        return []
+    except RuntimeError as e:
+        # API呼び出しエラー
+        status_container.error(f"❌ API呼び出しエラー: {str(e)}")
+        return []
+    except asyncio.CancelledError:
+        # キャンセルされた場合
+        status_container.warning("⚠️ チェックがキャンセルされました")
+        return []
     except Exception as e:
-        status_container.error(f"❌ エラー: {str(e)}")
+        # その他の予期しないエラー
+        status_container.error(f"❌ 予期しないエラー: {type(e).__name__}: {str(e)}")
         return []
 
 
@@ -449,9 +478,10 @@ def main():
         if uploaded_file:
             # Excelを読み込み
             try:
-                # 一時ファイルに保存
-                temp_path = Path(f"/tmp/{uploaded_file.name}")
-                temp_path.parent.mkdir(parents=True, exist_ok=True)
+                # 一時ファイルに保存（Windows/Linux両対応）
+                temp_dir = Path(tempfile.gettempdir()) / "player_list_checker"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                temp_path = temp_dir / uploaded_file.name
                 temp_path.write_bytes(uploaded_file.getvalue())
 
                 handler = ExcelHandler()

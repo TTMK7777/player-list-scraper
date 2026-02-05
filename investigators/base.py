@@ -177,3 +177,121 @@ def determine_alert_level(change_type: ChangeType) -> AlertLevel:
         ChangeType.NO_CHANGE: AlertLevel.OK,
     }
     return mapping.get(change_type, AlertLevel.INFO)
+
+
+@dataclass
+class StoreInvestigationResult:
+    """
+    店舗調査結果
+
+    【フィールド説明】
+    - company_name: 調査対象の企業名
+    - total_stores: 店舗総数
+    - direct_stores: 直営店数（判別可能な場合）
+    - franchise_stores: FC店数（判別可能な場合）
+    - prefecture_distribution: 都道府県別店舗分布 {"東京都": 10, ...}
+    - confidence: 信頼度 (0.0-1.0)
+    - source_urls: 情報源URL（必須 - 検証用）
+    - investigation_date: 調査実行日時
+    - investigation_mode: 調査モード ("ai" / "scraping" / "hybrid")
+    - notes: 補足情報
+    - needs_verification: 手動確認が必要かどうか
+    - raw_response: LLMの生レスポンス（デバッグ用）
+    """
+    company_name: str
+    total_stores: int
+    confidence: float
+    source_urls: list[str]  # 必須（検証用）
+    investigation_date: datetime
+    investigation_mode: str  # "ai" / "scraping" / "hybrid"
+    direct_stores: Optional[int] = None
+    franchise_stores: Optional[int] = None
+    prefecture_distribution: Optional[dict[str, int]] = None
+    notes: str = ""
+    needs_verification: bool = False
+    raw_response: str = ""
+
+    @classmethod
+    def create_success(
+        cls,
+        company_name: str,
+        total_stores: int,
+        source_urls: list[str],
+        investigation_mode: str,
+        confidence: float = 0.9,
+        direct_stores: Optional[int] = None,
+        franchise_stores: Optional[int] = None,
+        prefecture_distribution: Optional[dict[str, int]] = None,
+        notes: str = "",
+    ) -> "StoreInvestigationResult":
+        """成功した調査結果を作成"""
+        return cls(
+            company_name=company_name,
+            total_stores=total_stores,
+            confidence=confidence,
+            source_urls=source_urls,
+            investigation_date=datetime.now(),
+            investigation_mode=investigation_mode,
+            direct_stores=direct_stores,
+            franchise_stores=franchise_stores,
+            prefecture_distribution=prefecture_distribution,
+            notes=notes,
+            needs_verification=False,
+        )
+
+    @classmethod
+    def create_uncertain(
+        cls,
+        company_name: str,
+        investigation_mode: str,
+        reason: str = "",
+        source_urls: Optional[list[str]] = None,
+        raw_response: str = "",
+    ) -> "StoreInvestigationResult":
+        """要確認の調査結果を作成"""
+        return cls(
+            company_name=company_name,
+            total_stores=0,
+            confidence=0.3,
+            source_urls=source_urls or [],
+            investigation_date=datetime.now(),
+            investigation_mode=investigation_mode,
+            notes=f"要確認: {reason}" if reason else "要確認",
+            needs_verification=True,
+            raw_response=raw_response,
+        )
+
+    @classmethod
+    def create_error(
+        cls,
+        company_name: str,
+        investigation_mode: str,
+        error_message: str = "",
+    ) -> "StoreInvestigationResult":
+        """エラー結果を作成"""
+        return cls(
+            company_name=company_name,
+            total_stores=0,
+            confidence=0.0,
+            source_urls=[],
+            investigation_date=datetime.now(),
+            investigation_mode=investigation_mode,
+            notes=f"エラー: {error_message}",
+            needs_verification=True,
+        )
+
+    def to_dict(self) -> dict:
+        """辞書形式に変換"""
+        return {
+            "company_name": self.company_name,
+            "total_stores": self.total_stores,
+            "direct_stores": self.direct_stores,
+            "franchise_stores": self.franchise_stores,
+            "prefecture_distribution": self.prefecture_distribution,
+            "confidence": self.confidence,
+            "source_urls": self.source_urls,
+            "investigation_date": self.investigation_date.isoformat() if self.investigation_date else "",
+            "investigation_mode": self.investigation_mode,
+            "notes": self.notes,
+            "needs_verification": self.needs_verification,
+        }

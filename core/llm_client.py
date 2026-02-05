@@ -142,8 +142,16 @@ class LLMClient:
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]
 
+        except requests.exceptions.Timeout as e:
+            raise RuntimeError(f"Perplexity API タイムアウト（180秒）: {e}")
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 401:
+                raise RuntimeError("Perplexity API 認証エラー: APIキーを確認してください")
+            elif e.response is not None and e.response.status_code == 429:
+                raise RuntimeError("Perplexity API レート制限: しばらく待ってから再試行してください")
+            raise RuntimeError(f"Perplexity API HTTPエラー: {e}")
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Perplexity API error: {e}")
+            raise RuntimeError(f"Perplexity API 接続エラー: {e}")
 
     def _call_gemini(
         self,
@@ -206,8 +214,15 @@ class LLMClient:
             except ImportError:
                 raise RuntimeError("google-genai package is required: pip install google-genai")
 
+        except AttributeError as e:
+            raise RuntimeError(f"Gemini API レスポンス解析エラー: {e}")
         except Exception as e:
-            raise RuntimeError(f"Gemini API error: {e}")
+            error_msg = str(e)
+            if "quota" in error_msg.lower():
+                raise RuntimeError("Gemini API クォータ超過: 利用制限に達しました")
+            elif "invalid" in error_msg.lower() and "key" in error_msg.lower():
+                raise RuntimeError("Gemini API 認証エラー: APIキーを確認してください")
+            raise RuntimeError(f"Gemini API エラー: {e}")
 
     def extract_json(self, text: str) -> Optional[dict | list]:
         """

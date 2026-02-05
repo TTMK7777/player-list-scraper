@@ -329,3 +329,195 @@ class ValidationReportExporter:
         for col_idx, width in enumerate(column_widths, start=1):
             col_letter = get_column_letter(col_idx)
             self.sheet.column_dimensions[col_letter].width = width
+
+
+class StoreInvestigationExporter:
+    """
+    店舗調査結果をExcelにエクスポート
+
+    【出力形式】
+    - 企業情報、店舗数
+    - 調査モード、信頼度
+    - 47都道府県別の店舗数
+    - ソースURL（必須）
+    """
+
+    # 47都道府県リスト
+    PREFECTURES = [
+        "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+        "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+        "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+        "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+        "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+        "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+        "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
+    ]
+
+    # 信頼度別の色
+    CONFIDENCE_COLORS = {
+        "high": "6BCB77",     # 緑（0.8以上）
+        "medium": "FFD93D",   # 黄色（0.5-0.8）
+        "low": "FF6B6B",      # 赤（0.5未満）
+    }
+
+    # 基本ヘッダー列
+    BASE_COLUMNS = [
+        "企業名",
+        "総店舗数",
+        "直営店",
+        "FC店",
+        "調査モード",
+        "信頼度",
+        "要確認フラグ",
+    ]
+
+    # 後続ヘッダー列
+    SUFFIX_COLUMNS = [
+        "ソースURL",
+        "備考",
+        "調査日時",
+    ]
+
+    def __init__(self, include_prefectures: bool = True):
+        """
+        Args:
+            include_prefectures: 都道府県別列を含めるか
+        """
+        self.include_prefectures = include_prefectures
+        self.workbook = openpyxl.Workbook()
+        self.sheet = self.workbook.active
+        self.sheet.title = "店舗調査結果"
+
+    def get_columns(self) -> list[str]:
+        """出力列名のリストを取得"""
+        columns = self.BASE_COLUMNS.copy()
+        if self.include_prefectures:
+            columns.extend(self.PREFECTURES)
+        columns.extend(self.SUFFIX_COLUMNS)
+        return columns
+
+    def export(
+        self,
+        results: list,  # list[StoreInvestigationResult]
+        output_path: str | Path,
+    ) -> Path:
+        """
+        店舗調査結果をExcelファイルに出力
+
+        Args:
+            results: StoreInvestigationResult のリスト
+            output_path: 出力ファイルパス
+
+        Returns:
+            出力されたファイルのパス
+        """
+        output_path = Path(output_path)
+
+        # ヘッダー行を作成
+        self._write_header()
+
+        # データ行を書き込み
+        for row_idx, result in enumerate(results, start=2):
+            self._write_row(row_idx, result)
+
+        # 列幅を調整
+        self._adjust_column_widths()
+
+        # 保存
+        self.workbook.save(output_path)
+        return output_path
+
+    def _write_header(self) -> None:
+        """ヘッダー行を書き込み"""
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="4A90D9", end_color="4A90D9", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        columns = self.get_columns()
+        for col_idx, col_name in enumerate(columns, start=1):
+            cell = self.sheet.cell(row=1, column=col_idx, value=col_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+
+        # ヘッダー行を固定
+        self.sheet.freeze_panes = "A2"
+
+    def _write_row(self, row_idx: int, result) -> None:
+        """1行を書き込み"""
+        # 信頼度に応じた色
+        if result.confidence >= 0.8:
+            fill_color = self.CONFIDENCE_COLORS["high"]
+        elif result.confidence >= 0.5:
+            fill_color = self.CONFIDENCE_COLORS["medium"]
+        else:
+            fill_color = self.CONFIDENCE_COLORS["low"]
+
+        # 要確認の場合は別色
+        if result.needs_verification:
+            row_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
+        else:
+            row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+
+        # 基本データ
+        row_data = [
+            result.company_name,
+            result.total_stores,
+            result.direct_stores if result.direct_stores is not None else "",
+            result.franchise_stores if result.franchise_stores is not None else "",
+            result.investigation_mode,
+            f"{result.confidence * 100:.0f}%",
+            "TRUE" if result.needs_verification else "FALSE",
+        ]
+
+        # 都道府県別データ
+        if self.include_prefectures:
+            pref_dist = result.prefecture_distribution or {}
+            for pref in self.PREFECTURES:
+                count = pref_dist.get(pref, "")
+                row_data.append(count if count else "")
+
+        # 後続データ
+        source_urls = "\n".join(result.source_urls) if result.source_urls else ""
+        investigation_date = (
+            result.investigation_date.strftime("%Y-%m-%d %H:%M:%S")
+            if result.investigation_date else ""
+        )
+        row_data.extend([
+            source_urls,
+            result.notes or "",
+            investigation_date,
+        ])
+
+        # セルに書き込み
+        for col_idx, value in enumerate(row_data, start=1):
+            cell = self.sheet.cell(row=row_idx, column=col_idx, value=value)
+            cell.fill = row_fill
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    def _adjust_column_widths(self) -> None:
+        """列幅を調整"""
+        columns = self.get_columns()
+
+        for col_idx, col_name in enumerate(columns, start=1):
+            col_letter = get_column_letter(col_idx)
+
+            # 列名に応じた幅を設定
+            if col_name == "企業名":
+                width = 25
+            elif col_name in ("総店舗数", "直営店", "FC店"):
+                width = 10
+            elif col_name in ("調査モード", "信頼度", "要確認フラグ"):
+                width = 12
+            elif col_name == "ソースURL":
+                width = 50
+            elif col_name == "備考":
+                width = 40
+            elif col_name == "調査日時":
+                width = 20
+            elif col_name in self.PREFECTURES:
+                width = 6  # 都道府県は狭めに
+            else:
+                width = 15
+
+            self.sheet.column_dimensions[col_letter].width = width
