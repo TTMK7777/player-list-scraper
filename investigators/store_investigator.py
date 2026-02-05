@@ -238,7 +238,7 @@ class StoreInvestigator:
         industry: str,
         current_year: int,
     ) -> str:
-        """AI調査用プロンプトを生成"""
+        """AI調査用プロンプトを生成（v5.1 精度向上版）"""
         url_hint = f"\n【公式サイト】{official_url}" if official_url else ""
         industry_hint = f"\n【業界】{industry}" if industry else ""
 
@@ -249,19 +249,21 @@ class StoreInvestigator:
 「{company_name}」の店舗展開状況を調査してください。
 {url_hint}{industry_hint}
 
-【調査項目】
-1. 現在の店舗総数（直営/FC区別可能なら分けて）
-2. **各都道府県への店舗展開の有無**（最重要）
-   - 店舗がある都道府県: true
-   - 店舗がない都道府県: false
-   - 不明な都道府県: null
-3. 情報の出典URL（公式サイト、IR資料、店舗一覧ページ等）
+【最重要】以下の手順で調査してください:
+1. まず「{company_name} 店舗一覧」「{company_name} 店舗検索」で検索
+2. 公式サイトの店舗一覧/店舗検索ページを特定（URLを記録）
+3. 店舗一覧から各都道府県への展開有無を確認
 
-【重要】
+【都道府県の判定ルール】（厳格に適用）
+- 店舗一覧に該当都道府県の店舗が**1件でも**あれば → true
+- 店舗一覧で確認し、該当都道府県に**店舗がなければ** → false
+- 店舗一覧ページ自体が**見つからない/アクセスできない場合のみ** → null
+
+【重要な注意】
+- 「不明だから null」ではなく「店舗一覧を確認した結果」で判断すること
+- 店舗一覧が存在するなら、全都道府県を true/false で判定可能
+- 店舗一覧ページのURLは必ず store_list_url と sources に含める
 - {current_year}年以降の最新情報を優先
-- 公式サイトの「店舗一覧」「店舗検索」ページを必ず確認
-- 不明な場合は推測せず null と回答
-- 情報源URLは必ず提供（検証用）
 
 【出力形式】JSON
 ```json
@@ -269,6 +271,7 @@ class StoreInvestigator:
     "total_stores": 123,
     "direct_stores": 100,
     "franchise_stores": 23,
+    "store_list_url": "https://example.com/stores/",
     "prefecture_presence": {{
         {pref_template}, ...（全47都道府県）
     }},
@@ -278,8 +281,10 @@ class StoreInvestigator:
 }}
 ```
 
-**重要**: prefecture_presence は「店舗数」ではなく「店舗があるかどうか」を true/false/null で回答してください。
-全47都道府県について回答してください: {', '.join(self.PREFECTURES)}
+**重要**:
+- prefecture_presence は「店舗数」ではなく「店舗があるかどうか」を true/false/null で回答
+- store_list_url は店舗一覧/店舗検索ページのURLを必ず記載（見つからない場合は null）
+- 全47都道府県について回答: {', '.join(self.PREFECTURES)}
 """
 
     def _parse_ai_response(
@@ -326,6 +331,9 @@ class StoreInvestigator:
         direct_stores = data.get("direct_stores")
         franchise_stores = data.get("franchise_stores")
 
+        # 店舗一覧ページURL（v5.1で追加）
+        store_list_url = data.get("store_list_url")
+
         # 都道府県データ（新形式: prefecture_presence / 旧形式: prefecture_distribution）
         prefecture_presence = data.get("prefecture_presence") or data.get("prefecture_distribution")
 
@@ -360,6 +368,11 @@ class StoreInvestigator:
         if not isinstance(sources, list):
             sources = [sources] if sources else []
         sources = [s for s in sources if isinstance(s, str) and s.startswith("http")]
+
+        # store_list_url をソースURLに追加（重複を避ける）
+        if store_list_url and isinstance(store_list_url, str) and store_list_url.startswith("http"):
+            if store_list_url not in sources:
+                sources.insert(0, store_list_url)  # 先頭に追加
 
         # 要確認フラグ
         needs_verification = confidence < self.CONFIDENCE_THRESHOLD or total_stores == 0

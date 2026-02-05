@@ -236,8 +236,18 @@ async def run_store_investigation(
     provider: str,
     progress_container,
     status_container,
+    ai_model: str = "sonar-pro",
 ) -> list[StoreInvestigationResult]:
-    """店舗調査を実行"""
+    """店舗調査を実行
+
+    Args:
+        companies: 調査対象企業リスト
+        mode: 調査モード（AI / SCRAPING / HYBRID）
+        provider: LLMプロバイダー（perplexity / gemini）
+        progress_container: 進捗表示用Streamlitコンテナ
+        status_container: ステータス表示用Streamlitコンテナ
+        ai_model: AIモデル（sonar-pro / sonar-deep-research）
+    """
 
     logs = []
 
@@ -250,11 +260,12 @@ async def run_store_investigation(
             unsafe_allow_html=True
         )
 
-    status_container.info(f"🏪 {len(companies)}件の企業を調査中...")
+    model_label = "精密" if ai_model == "sonar-deep-research" else "高速"
+    status_container.info(f"🏪 {len(companies)}件の企業を調査中... (モード: {model_label})")
 
     try:
         llm = LLMClient(provider=provider)
-        investigator = StoreInvestigator(llm_client=llm)
+        investigator = StoreInvestigator(llm_client=llm, model=ai_model)
 
         results = await investigator.investigate_batch(
             companies,
@@ -738,7 +749,8 @@ def main():
         mode_option = st.radio(
             "調査モード",
             [
-                "🤖 AI調査（推奨）",
+                "🤖 AI調査（高速）",
+                "🔬 AI調査（精密）",
                 "🔗 スクレイピング",
                 "🔄 ハイブリッド（AI + スクレイピング補完）",
             ],
@@ -746,9 +758,22 @@ def main():
             label_visibility="collapsed",
         )
 
-        # モード変換
-        if "AI調査" in mode_option:
+        # モード変換 & モデル選択
+        ai_model = "sonar-pro"  # デフォルト
+
+        if "AI調査（高速）" in mode_option:
             investigation_mode = InvestigationMode.AI
+            ai_model = "sonar-pro"
+        elif "AI調査（精密）" in mode_option:
+            investigation_mode = InvestigationMode.AI
+            ai_model = "sonar-deep-research"
+            st.warning(
+                "⏳ **精密モード（sonar-deep-research）の注意事項**\n\n"
+                "- 1件あたり約5分かかります\n"
+                "- コストが約10〜50倍になります\n"
+                "- 通常モードで `?` が多い場合のみ推奨\n\n"
+                "まずは「AI調査（高速）」でテストしてください。"
+            )
         elif "スクレイピング" in mode_option:
             investigation_mode = InvestigationMode.SCRAPING
         else:
@@ -877,6 +902,7 @@ def main():
                 provider=provider,
                 progress_container=progress_container,
                 status_container=status_container,
+                ai_model=ai_model,
             ))
 
             st.session_state.store_results = results
