@@ -33,6 +33,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import AttributeInvestigationResult
 from core.sanitizer import sanitize_input
+from core.safe_parse import safe_float
 from core.attribute_presets import ATTRIBUTE_PRESETS
 
 
@@ -160,11 +161,13 @@ class AttributeInvestigator:
                     results.extend(batch_results)
                 except Exception as e:
                     # バッチ全体がエラーの場合、個別にエラー結果を生成
+                    batch_names = [p.get("player_name", "?") for p in batch]
+                    error_context = f"バッチ{batch_idx + 1} ({', '.join(batch_names)}): {e}"
                     for player in batch:
                         results.append(
                             AttributeInvestigationResult.create_error(
                                 player_name=player.get("player_name", "不明"),
-                                error_message=str(e),
+                                error_message=error_context,
                             )
                         )
 
@@ -194,7 +197,7 @@ class AttributeInvestigator:
         prompt = self._build_batch_prompt(players, attributes, industry)
 
         # LLM呼び出し（同期→非同期ラッパー）
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         raw_response = await loop.run_in_executor(
             None,
             lambda: llm.call(prompt, model=self.model, temperature=0.1)
@@ -343,7 +346,7 @@ class AttributeInvestigator:
                 else:
                     attribute_matrix[attr] = None  # null/不明
 
-            confidence = float(item.get("confidence", 0.5))
+            confidence = safe_float(item.get("confidence"), default=0.5)
             sources = item.get("sources", [])
             if isinstance(sources, str):
                 sources = [sources]

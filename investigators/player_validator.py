@@ -33,8 +33,6 @@ import re
 from datetime import datetime
 from typing import Callable, Optional
 
-import requests
-
 from .base import (
     AlertLevel,
     ChangeType,
@@ -50,7 +48,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.llm_client import LLMClient, get_default_client
 from core.excel_handler import PlayerData
-from core.sanitizer import sanitize_input
+from core.sanitizer import sanitize_input, verify_url
+from core.safe_parse import safe_float
 
 
 class PlayerValidator:
@@ -183,35 +182,15 @@ class PlayerValidator:
         """
         URLの有効性をチェック
 
+        共通ユーティリティ core.sanitizer.verify_url() に委譲。
+        後方互換性のためメソッドとして残す。
+
         Returns:
             dict: {"status_code": int, "final_url": str, "is_redirect": bool}
         """
         if not url:
             return None
-
-        try:
-            response = await asyncio.to_thread(
-                requests.head,
-                url,
-                timeout=10,
-                allow_redirects=True,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                },
-            )
-            return {
-                "status_code": response.status_code,
-                "final_url": str(response.url),
-                "is_redirect": len(response.history) > 0,
-            }
-        except requests.exceptions.Timeout:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "timeout"}
-        except requests.exceptions.SSLError:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "ssl_error"}
-        except requests.exceptions.ConnectionError:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "connection_error"}
-        except requests.exceptions.RequestException:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "request_error"}
+        return await verify_url(url)
 
     def _sanitize_input(self, text: str) -> str:
         """
@@ -324,7 +303,7 @@ class PlayerValidator:
         alert_level = determine_alert_level(change_type)
 
         # ステータスを決定
-        confidence = float(data.get("confidence", 0.5))
+        confidence = safe_float(data.get("confidence"), default=0.5)
         is_active = data.get("is_active", True)
 
         if not is_active:

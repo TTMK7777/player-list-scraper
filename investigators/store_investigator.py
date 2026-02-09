@@ -25,6 +25,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import StoreInvestigationResult
 from core.sanitizer import sanitize_input
+from core.safe_parse import safe_float
 
 
 class InvestigationMode(Enum):
@@ -340,14 +341,9 @@ class StoreInvestigator:
                 else:
                     prefecture_distribution[pref] = None  # 不明
 
-        confidence = data.get("confidence", 0.5)
+        confidence = safe_float(data.get("confidence"), default=0.5)
         sources = data.get("sources", [])
         notes = data.get("notes", "")
-
-        # 信頼度の妥当性チェック
-        if not isinstance(confidence, (int, float)):
-            confidence = 0.5
-        confidence = max(0.0, min(1.0, float(confidence)))
 
         # ソースURLの妥当性チェック
         if not isinstance(sources, list):

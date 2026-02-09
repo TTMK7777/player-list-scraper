@@ -36,6 +36,7 @@ import streamlit as st
 # 自作モジュールのパスを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.async_helpers import run_async
 from core.excel_handler import (
     ExcelHandler,
     ValidationReportExporter,
@@ -707,7 +708,7 @@ def main():
 
             players_to_check = st.session_state.players[:check_limit]
 
-            results = asyncio.run(run_validation(
+            results = run_async(run_validation(
                 players_to_check,
                 industry=industry,
                 provider=provider,
@@ -917,7 +918,7 @@ def main():
 
             companies_to_check = st.session_state.store_companies[:check_limit]
 
-            results = asyncio.run(run_store_investigation(
+            results = run_async(run_store_investigation(
                 companies_to_check,
                 mode=investigation_mode,
                 provider=provider,

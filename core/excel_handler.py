@@ -11,6 +11,7 @@ Excel読み書きハンドラー
 - 中古車販売店 プレイヤーリスト
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -161,11 +162,25 @@ class ExcelHandler:
 
     def _read_row(self, row_idx: int) -> Optional[PlayerData]:
         """1行をPlayerDataに変換"""
+        logger = logging.getLogger(__name__)
+
         # プレイヤー名を取得
-        player_name_col = self.column_map.get("_player_name", 1)
+        player_name_col = self.column_map.get("_player_name")
+        if player_name_col is None:
+            # フォールバック: 列1を使用するが警告を出す
+            player_name_col = 1
+            if row_idx == self.header_row + 1:  # 最初の行でのみ警告
+                logger.warning(
+                    "プレイヤー名列が自動検出されませんでした。列1をフォールバックとして使用します。"
+                )
+
         player_name = str(self.sheet.cell(row_idx, player_name_col).value or "").strip()
 
         if not player_name:
+            return None
+
+        # フォールバック列を使用している場合、数字のみの行はスキップ
+        if "_player_name" not in self.column_map and player_name.isdigit():
             return None
 
         # URLを取得

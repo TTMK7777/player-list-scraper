@@ -71,6 +71,57 @@ class TestExcelHandler:
         assert players[2].row_index == 7
 
 
+class TestExcelHandlerFallback:
+    """Excel列検出フォールバックのテスト"""
+
+    def test_numeric_only_rows_skipped_on_fallback(self, tmp_path):
+        """フォールバック列使用時、数字のみの行はスキップされる"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        # ヘッダー行（プレイヤー名パターンにマッチしない列名）
+        ws.cell(row=1, column=1, value="列A")
+        ws.cell(row=1, column=2, value="列B")
+
+        # データ行
+        ws.cell(row=2, column=1, value="12345")  # 数字のみ → スキップされるべき
+        ws.cell(row=2, column=2, value="データ1")
+        ws.cell(row=3, column=1, value="サービスX")  # これは通る
+        ws.cell(row=3, column=2, value="データ2")
+
+        file_path = tmp_path / "fallback_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        # 数字のみの行はスキップ、サービスXは残る
+        assert len(players) == 1
+        assert players[0].player_name == "サービスX"
+
+    def test_fallback_warning_logged(self, tmp_path, caplog):
+        """フォールバック列使用時にwarningがログ出力される"""
+        import openpyxl
+        import logging
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="列A")
+        ws.cell(row=2, column=1, value="テストプレイヤー")
+
+        file_path = tmp_path / "fallback_warning_test.xlsx"
+        wb.save(file_path)
+
+        with caplog.at_level(logging.WARNING):
+            handler = ExcelHandler()
+            handler.load(file_path)
+
+        assert any("フォールバック" in record.message for record in caplog.records)
+
+
 class TestValidationReportExporter:
     """ValidationReportExporter のテストクラス"""
 

@@ -122,7 +122,7 @@ class TestPlayerValidator:
         """URL確認の成功ケース"""
         validator = PlayerValidator(llm_client=MagicMock())
 
-        with patch('investigators.player_validator.requests.head') as mock_head:
+        with patch('core.sanitizer.requests.head') as mock_head:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.url = "https://example.com/"
@@ -139,7 +139,7 @@ class TestPlayerValidator:
         """リダイレクトの検出"""
         validator = PlayerValidator(llm_client=MagicMock())
 
-        with patch('investigators.player_validator.requests.head') as mock_head:
+        with patch('core.sanitizer.requests.head') as mock_head:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.url = "https://new-example.com/"
@@ -158,7 +158,7 @@ class TestPlayerValidator:
 
         validator = PlayerValidator(llm_client=MagicMock())
 
-        with patch('investigators.player_validator.requests.head') as mock_head:
+        with patch('core.sanitizer.requests.head') as mock_head:
             mock_head.side_effect = requests.exceptions.Timeout()
 
             result = await validator._check_url_status("https://slow-example.com/")

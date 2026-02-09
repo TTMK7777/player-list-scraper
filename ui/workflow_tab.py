@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from core.async_helpers import run_async
 from core.check_history import CheckHistory, CheckRecord
 from core.check_workflow import (
     CheckWorkflow,
@@ -178,7 +179,7 @@ def render_workflow_tab(provider: str, industry: str):
             llm = LLMClient(provider=provider)
             validator = PlayerValidator(llm_client=llm)
 
-            results = asyncio.run(validator.validate_batch(
+            results = run_async(validator.validate_batch(
                 target_players,
                 industry=industry,
                 on_progress=on_progress,

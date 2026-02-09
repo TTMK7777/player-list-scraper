@@ -245,21 +245,32 @@ class LLMClient:
             except json.JSONDecodeError:
                 pass
 
-        # { ... } 形式を探す
-        json_match = re.search(r'\{[\s\S]*\}', text)
-        if json_match:
-            try:
-                return json.loads(json_match.group())
-            except json.JSONDecodeError:
-                pass
+        # テキスト内の最初の `[` と `{` を比較し、先に出現する方から試す
+        # これにより "[{...}, {...}]" のような配列が "{...}" として誤解析されない
+        first_bracket = text.find('[')
+        first_brace = text.find('{')
 
-        # [ ... ] 形式を探す
-        json_match = re.search(r'\[[\s\S]*\]', text)
-        if json_match:
-            try:
-                return json.loads(json_match.group())
-            except json.JSONDecodeError:
-                pass
+        # 試行順序を決定
+        if first_bracket >= 0 and (first_brace < 0 or first_bracket < first_brace):
+            # [ が先に出現 → 配列パターンを先に試す
+            patterns = [
+                (r'\[[\s\S]*\]', "array_greedy"),
+                (r'\{[\s\S]*\}', "object_greedy"),
+            ]
+        else:
+            # { が先に出現（または両方ない） → オブジェクトパターンを先に試す
+            patterns = [
+                (r'\{[\s\S]*\}', "object_greedy"),
+                (r'\[[\s\S]*\]', "array_greedy"),
+            ]
+
+        for pattern, _label in patterns:
+            json_match = re.search(pattern, text)
+            if json_match:
+                try:
+                    return json.loads(json_match.group())
+                except json.JSONDecodeError:
+                    pass
 
         return None
 

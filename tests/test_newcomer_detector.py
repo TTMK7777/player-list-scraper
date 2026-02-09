@@ -186,7 +186,7 @@ class TestUrlVerification:
         """URL検証成功"""
         detector = NewcomerDetector()
 
-        with patch("investigators.newcomer_detector.requests.head") as mock_head:
+        with patch("core.sanitizer.requests.head") as mock_head:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.url = "https://example.com/"
@@ -203,7 +203,7 @@ class TestUrlVerification:
 
         detector = NewcomerDetector()
 
-        with patch("investigators.newcomer_detector.requests.head") as mock_head:
+        with patch("core.sanitizer.requests.head") as mock_head:
             mock_head.side_effect = requests.exceptions.Timeout()
 
             result = await detector._verify_url("https://example.com")

@@ -13,11 +13,16 @@
 
 import difflib
 import json
+import logging
+import os
+import tempfile
 import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -145,9 +150,30 @@ class CheckHistory:
         return []
 
     def _save_index(self, index: list[dict]) -> None:
-        """インデックスを保存"""
-        with open(self.index_path, "w", encoding="utf-8") as f:
-            json.dump(index, f, ensure_ascii=False, indent=2)
+        """インデックスを原子的に保存（temp file → rename パターン）
+
+        Windows では既存ファイルへの rename ができないため、
+        先に旧ファイルを削除してから rename する。
+        """
+        # 同じディレクトリに一時ファイルを作成
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(self.history_dir),
+            suffix=".tmp",
+            prefix="index_",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(index, f, ensure_ascii=False, indent=2)
+
+            # Windows: 既存ファイルがある場合は先に削除
+            if self.index_path.exists():
+                self.index_path.unlink()
+            os.rename(tmp_path, str(self.index_path))
+        except Exception:
+            # 書き込み失敗時は一時ファイルを削除
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
 
     def save_record(
         self,
@@ -267,16 +293,30 @@ class CheckHistory:
 
         # プレイヤー名でマッピング
         old_by_name = {}
+        old_empty_count = 0
         for r in old_results:
             name = r.get("player_name_original") or r.get("player_name") or r.get("company_name", "")
             if name:
                 old_by_name[name] = r
+            else:
+                old_empty_count += 1
+        if old_empty_count > 0:
+            logger.warning(
+                f"差分計算: 旧結果に空名プレイヤーが{old_empty_count}件ありました（差分から除外）"
+            )
 
         new_by_name = {}
+        new_empty_count = 0
         for r in new_results:
             name = r.get("player_name_original") or r.get("player_name") or r.get("company_name", "")
             if name:
                 new_by_name[name] = r
+            else:
+                new_empty_count += 1
+        if new_empty_count > 0:
+            logger.warning(
+                f"差分計算: 新結果に空名プレイヤーが{new_empty_count}件ありました（差分から除外）"
+            )
 
         old_names = set(old_by_name.keys())
         new_names = set(new_by_name.keys())
@@ -354,11 +394,24 @@ class CheckHistory:
         return report
 
     def _is_escalation(self, old_alert: str, new_alert: str) -> bool:
-        """アラートレベルがエスカレーションしたか判定"""
-        levels = ["正常", "情報", "警告", "緊急"]
-        old_idx = next((i for i, l in enumerate(levels) if l in old_alert), 0)
-        new_idx = next((i for i, l in enumerate(levels) if l in new_alert), 0)
-        return new_idx > old_idx
+        """アラートレベルがエスカレーションしたか判定
+
+        AlertLevel.value を使って安全に判定。
+        未知の値はデフォルトの重要度0とする。
+        """
+        from investigators.base import AlertLevel
+
+        # AlertLevel の value → 重要度のマッピング
+        severity_map = {
+            AlertLevel.OK.value: 0,
+            AlertLevel.INFO.value: 1,
+            AlertLevel.WARNING.value: 2,
+            AlertLevel.CRITICAL.value: 3,
+        }
+
+        old_severity = severity_map.get(old_alert, 0)
+        new_severity = severity_map.get(new_alert, 0)
+        return new_severity > old_severity
 
     def _format_attr(self, value) -> str:
         """属性値を表示形式に変換"""

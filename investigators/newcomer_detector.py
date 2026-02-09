@@ -28,14 +28,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-import requests
 
 # プロジェクトルートをパスに追加
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import NewcomerCandidate
-from core.sanitizer import sanitize_input, sanitize_url
+from core.sanitizer import sanitize_input, sanitize_url, verify_url
+from core.safe_parse import safe_float
 
 
 class NewcomerDetector:
@@ -158,7 +158,7 @@ class NewcomerDetector:
 ]"""
 
         # LLM呼び出し（同期→非同期ラッパー）
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         raw_response = await loop.run_in_executor(
             None,
             lambda: llm.call(prompt, model=self.model, temperature=0.1)
@@ -210,7 +210,7 @@ class NewcomerDetector:
                 official_url=official_url,
                 company_name=item.get("company_name", ""),
                 entry_date_approx=item.get("entry_date_approx", ""),
-                confidence=float(item.get("confidence", 0.5)),
+                confidence=safe_float(item.get("confidence"), default=0.5),
                 source_urls=source_urls,
                 reason=item.get("reason", ""),
                 verification_status="unverified",
@@ -222,34 +222,9 @@ class NewcomerDetector:
 
     async def _verify_url(self, url: str) -> dict:
         """
-        URLの有効性をチェック（player_validator._check_url_status() と同パターン）
+        URLの有効性をチェック
 
-        Returns:
-            dict: {"status_code": int, "final_url": str, "is_redirect": bool}
+        共通ユーティリティ core.sanitizer.verify_url() に委譲。
+        後方互換性のためメソッドとして残す。
         """
-        if not url:
-            return {"status_code": 0, "error": "empty_url"}
-
-        try:
-            response = await asyncio.to_thread(
-                requests.head,
-                url,
-                timeout=10,
-                allow_redirects=True,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                },
-            )
-            return {
-                "status_code": response.status_code,
-                "final_url": str(response.url),
-                "is_redirect": len(response.history) > 0,
-            }
-        except requests.exceptions.Timeout:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "timeout"}
-        except requests.exceptions.SSLError:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "ssl_error"}
-        except requests.exceptions.ConnectionError:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "connection_error"}
-        except requests.exceptions.RequestException:
-            return {"status_code": 0, "final_url": url, "is_redirect": False, "error": "request_error"}
+        return await verify_url(url)

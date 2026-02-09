@@ -6,7 +6,6 @@
 """
 
 import asyncio
-import io
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -14,9 +13,11 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from core.async_helpers import run_async
 from core.attribute_presets import ATTRIBUTE_PRESETS, get_preset, get_preset_labels
 from core.excel_handler import ExcelHandler, AttributeInvestigationExporter
 from core.llm_client import LLMClient
+from core.sanitizer import sanitize_input
 from investigators.attribute_investigator import AttributeInvestigator
 from ui.common import display_cost_warning, export_to_excel_bytes
 
@@ -110,7 +111,7 @@ def render_attribute_tab(provider: str, industry: str):
                 if not line.strip():
                     continue
                 parts = line.split(",")
-                player_name = parts[0].strip()
+                player_name = sanitize_input(parts[0].strip())
                 official_url = parts[1].strip() if len(parts) > 1 else ""
                 players.append({
                     "player_name": player_name,
@@ -192,7 +193,7 @@ def render_attribute_tab(provider: str, industry: str):
             llm = LLMClient(provider=provider)
             inv = AttributeInvestigator(llm_client=llm)
 
-            results = asyncio.run(inv.investigate_batch(
+            results = run_async(inv.investigate_batch(
                 players_to_check,
                 attributes,
                 industry=industry,

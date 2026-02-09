@@ -169,3 +169,23 @@ class TestSanitizeUrl:
         """スキームなしのURL（ドメイン名あり）"""
         result = sanitize_url("www.example.com/path")
         assert result.startswith("https://")
+
+    # Phase 3 追加テスト: URLサニタイザーの偽陽性修正
+
+    def test_file_extension_not_converted_to_url_txt(self):
+        """ファイル名 'test.txt' はURLに変換されない"""
+        assert sanitize_url("test.txt") == ""
+
+    def test_file_extension_not_converted_to_url_pdf(self):
+        """ファイル名 'report.pdf' はURLに変換されない"""
+        assert sanitize_url("report.pdf") == ""
+
+    def test_file_extension_not_converted_to_url_xlsx(self):
+        """ファイル名 'data.xlsx' はURLに変換されない"""
+        assert sanitize_url("data.xlsx") == ""
+
+    def test_real_domain_with_txt_tld_passthrough(self):
+        """実際のドメイン 'https://example.txt' はURLとして通過する"""
+        # スキーム付きなのでファイル拡張子チェックは適用されない
+        result = sanitize_url("https://example.txt")
+        assert result == "https://example.txt"

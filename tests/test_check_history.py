@@ -295,3 +295,61 @@ class TestDiffReport:
         assert d["old_phase"] == "pre_survey"
         assert d["total_changes"] == 1
         assert "新サービス" in d["new_players"]
+
+
+# ====================================
+# Phase 4 追加テスト
+# ====================================
+class TestCheckHistoryPhase4:
+    """Phase 4 バグ修正の追加テスト"""
+
+    def test_empty_name_warning_logged(self, tmp_path, caplog):
+        """空名プレイヤーがwarningログに出力される"""
+        import logging
+
+        history = CheckHistory(history_dir=tmp_path / "history")
+        old = [{"player_name": "Netflix"}, {"player_name": ""}]
+        new = [{"player_name": "Netflix"}]
+
+        with caplog.at_level(logging.WARNING):
+            history.compute_diff(old, new)
+
+        assert any("空名" in record.message for record in caplog.records)
+
+    def test_escalation_with_enum_values(self, tmp_path):
+        """AlertLevel.value を使ったエスカレーション判定"""
+        from investigators.base import AlertLevel
+
+        history = CheckHistory(history_dir=tmp_path / "history")
+        old = [{"player_name": "サービスA", "alert_level": AlertLevel.OK.value}]
+        new = [{"player_name": "サービスA", "alert_level": AlertLevel.CRITICAL.value}]
+
+        diff = history.compute_diff(old, new)
+        assert len(diff.new_alerts) == 1
+
+    def test_deescalation_with_enum_values(self, tmp_path):
+        """AlertLevel.value を使ったデエスカレーション判定"""
+        from investigators.base import AlertLevel
+
+        history = CheckHistory(history_dir=tmp_path / "history")
+        old = [{"player_name": "サービスA", "alert_level": AlertLevel.WARNING.value}]
+        new = [{"player_name": "サービスA", "alert_level": AlertLevel.OK.value}]
+
+        diff = history.compute_diff(old, new)
+        assert len(diff.resolved_alerts) == 1
+
+    def test_atomic_save_index(self, tmp_path):
+        """原子的書き込みが正常動作"""
+        history = CheckHistory(history_dir=tmp_path / "history")
+
+        # 複数回保存してもインデックスが壊れない
+        for i in range(5):
+            record = CheckRecord(
+                phase="pre_survey",
+                industry="テスト",
+                player_count=i,
+            )
+            history.save_record(record, [{"player_name": f"サービス{i}"}])
+
+        all_records = history.list_records()
+        assert len(all_records) == 5

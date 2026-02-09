@@ -6,7 +6,6 @@
 """
 
 import asyncio
-import io
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -14,8 +13,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from core.async_helpers import run_async
 from core.excel_handler import ExcelHandler
 from core.llm_client import LLMClient
+from core.sanitizer import sanitize_input
 from investigators.newcomer_detector import NewcomerDetector
 from ui.common import display_verification_badge
 
@@ -65,7 +66,7 @@ def render_newcomer_tab(provider: str, industry: str):
         )
 
         if st.button("入力内容を反映", key="newcomer_apply_input"):
-            names = [n.strip() for n in input_text.strip().split("\n") if n.strip()]
+            names = [sanitize_input(n.strip()) for n in input_text.strip().split("\n") if n.strip()]
             if names:
                 st.session_state.existing_players = names
                 st.success(f"{len(names)}件の既存プレイヤーを登録しました")
@@ -109,7 +110,7 @@ def render_newcomer_tab(provider: str, industry: str):
             llm = LLMClient(provider=provider)
             detector = NewcomerDetector(llm_client=llm)
 
-            candidates = asyncio.run(detector.detect(
+            candidates = run_async(detector.detect(
                 industry=industry,
                 existing_players=st.session_state.existing_players,
                 on_progress=on_progress,
