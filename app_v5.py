@@ -52,10 +52,13 @@ from investigators.base import (
 )
 from investigators.player_validator import PlayerValidator
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
+from ui.attribute_tab import render_attribute_tab
+from ui.newcomer_tab import render_newcomer_tab
+from ui.workflow_tab import render_workflow_tab
 
 # ページ設定
 st.set_page_config(
-    page_title="プレイヤーリスト調査システム v5.0",
+    page_title="プレイヤーリスト調査システム v6.0",
     page_icon="🔍",
     layout="wide",
 )
@@ -523,8 +526,8 @@ def display_scraping_warning():
 def main():
     init_session_state()
 
-    st.title("🔍 プレイヤーリスト調査システム v5.0")
-    st.caption("正誤チェック + 店舗調査を統合 | AI調査（推奨）+ スクレイピング（オプション）")
+    st.title("🔍 プレイヤーリスト調査システム v6.0")
+    st.caption("正誤チェック + 店舗調査 + 属性調査 + 新規参入検出 + 3段階チェック | AI調査（推奨）")
 
     # ====================================
     # サイドバー
@@ -588,13 +591,19 @@ def main():
         st.subheader("📖 使い方")
         st.markdown("""
         **正誤チェック**
-        1. Excelアップロード
-        2. 「正誤チェック開始」
+        1. Excelアップロード → 「正誤チェック開始」
 
         **店舗調査**
-        1. 調査モード選択
-        2. 企業情報入力
-        3. 「店舗調査開始」
+        1. 調査モード選択 → 企業入力 → 「店舗調査開始」
+
+        **属性調査** (NEW)
+        1. プリセット選択 → Excel入力 → 「属性調査開始」
+
+        **新規参入検出** (NEW)
+        1. 既存リスト入力 → 「新規参入を検索」
+
+        **3段階チェック** (NEW)
+        1. フェーズ選択 → Excel入力 → フェーズ実行
         """)
 
     # ====================================
@@ -605,8 +614,11 @@ def main():
     function_type = st.radio(
         "機能タイプ",
         [
-            "🔍 プレイヤーリスト 正誤チェック",
-            "🏪 店舗・教室調査",
+            "🔍 正誤チェック",
+            "🏪 店舗調査",
+            "📊 属性調査",
+            "🆕 新規参入検出",
+            "📋 3段階チェック",
         ],
         horizontal=True,
         label_visibility="collapsed",
@@ -617,7 +629,16 @@ def main():
     # ====================================
     # 正誤チェック機能
     # ====================================
-    if "正誤チェック" in function_type:
+    if "属性調査" in function_type:
+        render_attribute_tab(provider=provider, industry=industry)
+
+    elif "新規参入検出" in function_type:
+        render_newcomer_tab(provider=provider, industry=industry)
+
+    elif "3段階チェック" in function_type:
+        render_workflow_tab(provider=provider, industry=industry)
+
+    elif "正誤チェック" in function_type:
         st.subheader("📂 Excelアップロード")
 
         uploaded_file = st.file_uploader(
@@ -743,7 +764,7 @@ def main():
     # ====================================
     # 店舗調査機能
     # ====================================
-    elif "店舗・教室調査" in function_type:
+    elif "店舗調査" in function_type:
         st.subheader("🔧 調査モード選択")
 
         mode_option = st.radio(

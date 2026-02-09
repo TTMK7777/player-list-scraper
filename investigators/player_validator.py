@@ -50,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.llm_client import LLMClient, get_default_client
 from core.excel_handler import PlayerData
+from core.sanitizer import sanitize_input
 
 
 class PlayerValidator:
@@ -215,24 +216,9 @@ class PlayerValidator:
     def _sanitize_input(self, text: str) -> str:
         """
         プロンプトインジェクション対策: ユーザー入力をサニタイズ
-
-        Args:
-            text: サニタイズ対象のテキスト
-
-        Returns:
-            サニタイズされたテキスト
+        ※ 共通サニタイザー core.sanitizer.sanitize_input() に委譲
         """
-        if not text:
-            return ""
-        # 改行・タブを空白に置換
-        sanitized = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-        # 連続する空白を1つに（re はファイル先頭でインポート済み）
-        sanitized = re.sub(r'\s+', ' ', sanitized)
-        # プロンプト区切り文字をエスケープ
-        sanitized = sanitized.replace('```', '`‵`')
-        sanitized = sanitized.replace('【', '[').replace('】', ']')
-        # 長さ制限（過剰な入力を防止）
-        return sanitized[:500].strip()
+        return sanitize_input(text)
 
     async def _query_latest_info(
         self,

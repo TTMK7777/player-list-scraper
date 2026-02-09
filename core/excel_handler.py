@@ -530,3 +530,197 @@ class StoreInvestigationExporter:
                 width = 15
 
             self.sheet.column_dimensions[col_letter].width = width
+
+
+class AttributeInvestigationExporter:
+    """
+    属性調査結果をExcelにエクスポート
+
+    【出力形式】
+    - 行: プレイヤー
+    - 列: 属性 → ○/×/? マトリクス
+    - 信頼度、ソースURL
+    """
+
+    # 信頼度別の色
+    CONFIDENCE_COLORS = {
+        "high": "6BCB77",     # 緑（0.8以上）
+        "medium": "FFD93D",   # 黄色（0.5-0.8）
+        "low": "FF6B6B",      # 赤（0.5未満）
+    }
+
+    # 属性値別の色
+    ATTRIBUTE_COLORS = {
+        True: "C6EFCE",   # 薄緑（○）
+        False: "FFC7CE",  # 薄赤（×）
+        None: "FFEB9C",   # 薄黄（?）
+    }
+
+    # 基本ヘッダー列
+    BASE_COLUMNS = [
+        "プレイヤー名",
+    ]
+
+    # 後続ヘッダー列
+    SUFFIX_COLUMNS = [
+        "信頼度",
+        "要確認フラグ",
+        "ソースURL",
+        "調査日時",
+    ]
+
+    def __init__(self, attributes: list[str]):
+        """
+        Args:
+            attributes: 属性名リスト（列として出力）
+        """
+        self.attributes = attributes
+        self.workbook = openpyxl.Workbook()
+        self.sheet = self.workbook.active
+        self.sheet.title = "属性調査結果"
+
+    def get_columns(self) -> list[str]:
+        """出力列名のリストを取得"""
+        columns = self.BASE_COLUMNS.copy()
+        columns.extend(self.attributes)
+        columns.extend(self.SUFFIX_COLUMNS)
+        return columns
+
+    def export(
+        self,
+        results: list,  # list[AttributeInvestigationResult]
+        output_path: str | Path,
+    ) -> Path:
+        """
+        属性調査結果をExcelファイルに出力
+
+        Args:
+            results: AttributeInvestigationResult のリスト
+            output_path: 出力ファイルパス
+
+        Returns:
+            出力されたファイルのパス
+        """
+        output_path = Path(output_path)
+
+        # ヘッダー行を作成
+        self._write_header()
+
+        # データ行を書き込み
+        for row_idx, result in enumerate(results, start=2):
+            self._write_row(row_idx, result)
+
+        # 列幅を調整
+        self._adjust_column_widths()
+
+        # 保存
+        self.workbook.save(output_path)
+        return output_path
+
+    def _write_header(self) -> None:
+        """ヘッダー行を書き込み"""
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="4A90D9", end_color="4A90D9", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        columns = self.get_columns()
+        for col_idx, col_name in enumerate(columns, start=1):
+            cell = self.sheet.cell(row=1, column=col_idx, value=col_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+
+        # ヘッダー行を固定
+        self.sheet.freeze_panes = "A2"
+
+    def _write_row(self, row_idx: int, result) -> None:
+        """1行を書き込み"""
+        # 信頼度に応じた行色
+        if result.confidence >= 0.8:
+            row_fill_color = self.CONFIDENCE_COLORS["high"]
+        elif result.confidence >= 0.5:
+            row_fill_color = self.CONFIDENCE_COLORS["medium"]
+        else:
+            row_fill_color = self.CONFIDENCE_COLORS["low"]
+
+        col_idx = 1
+
+        # プレイヤー名
+        cell = self.sheet.cell(row=row_idx, column=col_idx, value=result.player_name)
+        cell.alignment = Alignment(vertical="top")
+        if result.needs_verification:
+            cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
+        col_idx += 1
+
+        # 属性マトリクス（○/×/?）
+        attr_matrix = result.attribute_matrix or {}
+        for attr in self.attributes:
+            value = attr_matrix.get(attr)
+
+            if value is True:
+                display = "○"
+                fill_color = self.ATTRIBUTE_COLORS[True]
+            elif value is False:
+                display = "×"
+                fill_color = self.ATTRIBUTE_COLORS[False]
+            else:
+                display = "?"
+                fill_color = self.ATTRIBUTE_COLORS[None]
+
+            cell = self.sheet.cell(row=row_idx, column=col_idx, value=display)
+            cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            col_idx += 1
+
+        # 信頼度
+        confidence_cell = self.sheet.cell(
+            row=row_idx, column=col_idx,
+            value=f"{result.confidence * 100:.0f}%"
+        )
+        confidence_cell.fill = PatternFill(
+            start_color=row_fill_color, end_color=row_fill_color, fill_type="solid"
+        )
+        col_idx += 1
+
+        # 要確認フラグ
+        self.sheet.cell(
+            row=row_idx, column=col_idx,
+            value="TRUE" if result.needs_verification else "FALSE"
+        )
+        col_idx += 1
+
+        # ソースURL
+        source_urls = "\n".join(result.source_urls) if result.source_urls else ""
+        cell = self.sheet.cell(row=row_idx, column=col_idx, value=source_urls)
+        cell.alignment = Alignment(vertical="top", wrap_text=True)
+        col_idx += 1
+
+        # 調査日時
+        investigation_date = (
+            result.investigation_date.strftime("%Y-%m-%d %H:%M:%S")
+            if result.investigation_date else ""
+        )
+        self.sheet.cell(row=row_idx, column=col_idx, value=investigation_date)
+
+    def _adjust_column_widths(self) -> None:
+        """列幅を調整"""
+        columns = self.get_columns()
+
+        for col_idx, col_name in enumerate(columns, start=1):
+            col_letter = get_column_letter(col_idx)
+
+            if col_name == "プレイヤー名":
+                width = 25
+            elif col_name in ("信頼度", "要確認フラグ"):
+                width = 12
+            elif col_name == "ソースURL":
+                width = 50
+            elif col_name == "調査日時":
+                width = 20
+            elif col_name in self.attributes:
+                # 属性名の長さに応じて調整（最小6、最大15）
+                width = max(6, min(15, len(col_name) * 2 + 2))
+            else:
+                width = 15
+
+            self.sheet.column_dimensions[col_letter].width = width

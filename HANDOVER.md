@@ -1,8 +1,8 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-02-05
-> **担当**: Claude Opus 4.5 + たいむさん
-> **バージョン**: v5.1
+> **最終更新**: 2026-02-09
+> **担当**: Claude Opus 4.6 + たいむさん
+> **バージョン**: v6.0
 
 ---
 
@@ -19,14 +19,30 @@
 | 中古車販売店 | 16件 | 【20241217修正】2025_中古車販売店_プレイヤーリスト.xlsx |
 
 ### 主な機能
-1. **プレイヤー正誤チェック** (v4.0 NEW)
+1. **プレイヤー正誤チェック** (v4.0)
    - 撤退・統合・名称変更の自動検出
    - Perplexity/Gemini APIによる最新情報取得
    - アラートレベル別レポート出力
 
 2. **店舗・教室の都道府県別調査** (v3.0)
-   - マルチ戦略スクレイピング
+   - マルチ戦略スクレイピング + AI調査
    - 静的HTML → ブラウザ自動化 → AI推論
+
+3. **属性調査（カテゴリ/ブランド）** (v6.0 NEW)
+   - 動画配信ジャンル別配信有無
+   - クレカ取り扱いブランド判定
+   - バッチプロンプト方式でコスト最適化
+   - プリセット + カスタム属性対応
+
+4. **新規参入プレイヤー自動検出** (v6.0 NEW)
+   - LLM提案 → URL自動検証 → 手動確認の3ステップ
+   - ハルシネーション対策（URL検証 + 信頼度スコアリング）
+   - 自動追加なし（候補提示のみ）
+
+5. **3段階チェック体制** (v6.0 NEW)
+   - 実査前 → 確定時 → 発表前のワークフロー管理
+   - フェーズ間差分レポート
+   - チェック履歴の保存・閲覧
 
 ---
 
@@ -35,29 +51,49 @@
 ```
 プレイヤーリスト作成/
 ├── app_v5.py              # 統合GUI（Streamlit）★メイン
-├── app_v4.py              # 正誤チェックGUI
+├── app_v4.py              # 正誤チェックGUI（旧）
 ├── app_v3.py              # 店舗調査GUI（旧）
-├── app.py                 # 旧バージョン（非推奨）
 │
 ├── core/                  # コアモジュール
 │   ├── __init__.py
-│   ├── excel_handler.py   # Excel読み書き
-│   └── llm_client.py      # LLMクライアント（Perplexity/Gemini）
+│   ├── excel_handler.py   # Excel読み書き + AttributeInvestigationExporter
+│   ├── llm_client.py      # LLMクライアント（Perplexity/Gemini）
+│   ├── sanitizer.py       # 入力サニタイザー共通化 (v6.0 NEW)
+│   ├── attribute_presets.py # 属性プリセット定義 (v6.0 NEW)
+│   ├── check_history.py   # チェック履歴管理 + 差分計算 (v6.0 NEW)
+│   └── check_workflow.py  # 3段階ワークフロー管理 (v6.0 NEW)
 │
 ├── investigators/         # 調査モジュール
 │   ├── __init__.py
-│   ├── base.py            # データ型定義（AlertLevel等）
-│   └── player_validator.py # 正誤チェッカー
+│   ├── base.py            # データ型定義（AlertLevel, AttributeInvestigationResult等）
+│   ├── player_validator.py # 正誤チェッカー
+│   ├── store_investigator.py # 店舗調査
+│   ├── attribute_investigator.py # 属性調査エンジン (v6.0 NEW)
+│   └── newcomer_detector.py  # 新規参入検出 (v6.0 NEW)
 │
-├── store_scraper_v3.py    # 店舗スクレイピングエンジン
-├── store_scraper.py       # 旧バージョン
+├── ui/                    # UIモジュール (v6.0 NEW)
+│   ├── __init__.py
+│   ├── common.py          # 共通UIコンポーネント
+│   ├── attribute_tab.py   # 属性調査タブ
+│   ├── newcomer_tab.py    # 新規参入検出タブ
+│   └── workflow_tab.py    # 3段階チェックタブ
+│
+├── tests/                 # テスト
+│   ├── conftest.py
+│   ├── test_sanitizer.py       # サニタイザーテスト (v6.0 NEW)
+│   ├── test_attribute_investigator.py # 属性調査テスト (v6.0 NEW)
+│   ├── test_newcomer_detector.py # 新規参入検出テスト (v6.0 NEW)
+│   ├── test_check_history.py    # 履歴管理テスト (v6.0 NEW)
+│   ├── test_check_workflow.py   # ワークフローテスト (v6.0 NEW)
+│   ├── test_player_validator.py
+│   └── ...
 │
 ├── docs/                  # ドキュメント・本番データ
 │   └── プレイヤーリスト/  # ★本番Excel（gitignore対象）
 │
 ├── 出力/                  # 生成ファイル（gitignore対象）
-├── start_v4.bat           # v4起動バッチ
-├── start_v3.bat           # v3起動バッチ
+│   └── history/           # チェック履歴 (v6.0 NEW)
+│
 ├── requirements.txt       # 依存関係
 └── .gitignore             # Git除外設定
 ```
@@ -88,36 +124,25 @@ pip install -r requirements.txt
 - `openpyxl` - Excel操作
 - `requests` - HTTP通信
 - `python-dotenv` - 環境変数
-- `google-genai` - Gemini API（新パッケージ）
+- `google-genai` - Gemini API
 - `playwright` - ブラウザ自動化（オプション）
 
 ---
 
 ## 4. 起動方法
 
-### v5.0（統合版）★推奨
+### v6.0（統合版）★推奨
 ```bash
 streamlit run app_v5.py
-# または
-start_v5.bat をダブルクリック
-```
-
-### v4.0（正誤チェック）
-```bash
-streamlit run app_v4.py
-```
-
-### v3.0（店舗調査・旧）
-```bash
-streamlit run app_v3.py
 ```
 
 ---
 
-## 5. 正誤チェック機能詳細
+## 5. 機能詳細
 
-### 5.1 アラートレベル
+### 5.1 正誤チェック
 
+#### アラートレベル
 | レベル | 意味 | 対応 |
 |--------|------|------|
 | 🔴 緊急 | 撤退・統合 | 即時リスト更新 |
@@ -126,88 +151,105 @@ streamlit run app_v3.py
 | ✅ 正常 | 変更なし | アクション不要 |
 | ⚠️ 要確認 | 判断不能 | 手動確認必要 |
 
-### 5.2 出力形式
+### 5.2 属性調査（v6.0 NEW）
 
-- **Excelレポート**: アラート別色分け、詳細情報付き
-- **CSV**: 全データのエクスポート
+#### プリセット
+| プリセット | 属性数 | 推奨バッチ | 推定コスト |
+|-----------|--------|-----------|-----------|
+| 動画配信_ジャンル | 15属性 | 5社/回 | ~$0.24（36件） |
+| クレカ_ブランド | 7属性 | 10社/回 | ~$1.62（539件） |
+| カスタム | ユーザー定義 | 自動決定 | 件数次第 |
 
-### 5.3 API選択
+#### 出力形式
+- **マトリクス表示**: ○/×/? のテーブル
+- **Excel**: 色分け付き（緑=○、赤=×、黄=?）
+- **CSV**: 全データエクスポート
 
-| API | 特徴 | 推奨用途 |
-|-----|------|----------|
-| Perplexity (sonar-pro) | Web検索+最新情報 | **正誤チェック**（推奨） |
-| Gemini (2.5-flash) | 高速・低コスト | バックアップ |
+### 5.3 新規参入検出（v6.0 NEW）
+
+#### ハルシネーション対策
+| ステップ | 内容 |
+|---------|------|
+| 1. LLM提案 | 業界+既存リスト → 候補生成 |
+| 2. URL検証 | HEAD リクエストで公式サイト存在確認 |
+| 3. 信頼度調整 | URL不明 → 信頼度50%減 |
+| 4. 手動確認 | チェックボックスで選択 → エクスポート |
+
+#### 検証バッジ
+| バッジ | 意味 |
+|--------|------|
+| 🟢 URL検証済み | 公式サイト存在確認OK |
+| 🔴 URL不明 | URLにアクセスできなかった（要注意） |
+| 🟡 未検証 | URLが提供されていない |
+
+### 5.4 3段階チェック体制（v6.0 NEW）
+
+| フェーズ | タイミング | 実行内容 | 差分基準 |
+|----------|----------|----------|---------|
+| 実査前 | 調査設計時 | 正誤全件 + 新規参入 + 属性全件 | ベースライン作成 |
+| 確定時 | 集計後 | 正誤全件 + 属性（変更ありのみ） | 実査前との差分 |
+| 発表前 | 公開直前 | CRITICALのみ再検証 + 最終確認 | 確定時との差分 |
 
 ---
 
-## 6. 今回の変更履歴
+## 6. 変更履歴
+
+### v6.0 (2026-02-09) - 4機能追加
+
+#### Phase 0: 共通基盤
+- `core/sanitizer.py` - 入力サニタイザーの共通化
+- `player_validator.py`, `store_investigator.py` の重複コードを統合
+
+#### Phase 1: 属性調査エンジン
+- `investigators/attribute_investigator.py` - バッチプロンプト方式
+- `core/attribute_presets.py` - 動画配信ジャンル/クレカブランドのプリセット
+- `core/excel_handler.py` - `AttributeInvestigationExporter` 追加
+
+#### Phase 2: 新規参入検出
+- `investigators/newcomer_detector.py` - LLM + URL自動検証
+- 信頼度スコアリング（URL不明時50%ペナルティ）
+
+#### Phase 3: 3段階チェック体制
+- `core/check_history.py` - 履歴管理 + 差分計算
+- `core/check_workflow.py` - フェーズ管理
+- `difflib.SequenceMatcher` による名称類似度判定
+
+#### Phase 4: UI統合
+- `ui/` ディレクトリ新設 - UIモジュール分割
+- `app_v5.py` に3つの新タブ追加
+- 5機能のラジオボタン切り替え
+
+#### テスト
+- 新規テスト: 114件（sanitizer 28 + attribute 30 + newcomer 17 + history 21 + workflow 18）
+- 既存テスト: 97件
+- 合計: 211件
 
 ### v5.1 (2026-02-05) - 店舗調査精度向上
+- プロンプト最適化で「?」率を70% → 30%以下に改善
+- AI調査モード選択UI追加（高速/精密）
 
-#### 問題点
-- 店舗調査で多くの都道府県が「?」（不明）になる問題
-- 原因: プロンプト設計の問題（検索の深さではなく）
+### v5.0 (2026-02-05) - v3+v4統合
+- `app_v5.py` - 正誤チェック + 店舗調査を統合GUI化
 
-#### 改善内容
-
-**1. プロンプト最適化 (`store_investigator.py`)**
-- 店舗一覧ページの発見を最優先タスクに変更
-- 「null」の使用条件を厳格化（店舗一覧が見つからない場合のみ）
-- `store_list_url` フィールドを追加（ソースURL必須化）
-
-**2. AIモデル選択UI追加 (`app_v5.py`)**
-| モード | モデル | 特徴 |
-|--------|--------|------|
-| AI調査（高速） | sonar-pro | デフォルト、低コスト |
-| AI調査（精密） | sonar-deep-research | 5分/件、高コスト |
-
-**3. 期待効果**
-| 指標 | 改善前 | 改善後 |
-|------|--------|--------|
-| `?` の割合 | 70%+ | 30%以下 |
-| コスト | - | 変化なし |
-
-### v5.0 (2026-02-05) - AI店舗調査統合
-
-- `app_v5.py` - v3+v4の機能を統合
-- AI調査をデフォルトに変更
-- 都道府県別出力を○/×/?形式に
-
-### v4.0 (2026-02-04)
-
-#### 新規実装
-- `core/` モジュール群
-- `investigators/` モジュール群
-- `app_v4.py` - 正誤チェックGUI
-
-#### セキュリティ改善
-- `.gitignore`: 本番Excel除外
-- APIキー表示削除（「設定済み」のみ）
-- `os.system()` → `subprocess.Popen()`
-- `load_dotenv(override=True)` 統一
-
-#### バグ修正
-- Geminiモデル名更新（`gemini-2.5-flash`）
-- 環境変数優先順位修正
+### v4.0 (2026-02-04) - 正誤チェック
+- `core/`, `investigators/` モジュール群の新規実装
+- セキュリティ改善（APIキー非表示、入力サニタイズ）
 
 ---
 
 ## 7. 既知の課題・今後の拡張
 
-### 7.1 未実装機能
-- [ ] クレカブランド調査（Phase 3）
-- [ ] 動画配信カテゴリ調査（Phase 4）
-- [ ] 新規参入プレイヤー自動検出
-
-### 7.2 改善候補
+### 7.1 改善候補
 - [ ] バッチ処理の並列化強化
 - [ ] キャッシュ機能（重複調査防止）
 - [ ] Slack/Teams通知連携
+- [ ] UIの既存タブ（正誤チェック、店舗調査）も `ui/` モジュールに分離
 
-### 7.3 注意事項
+### 7.2 注意事項
 - Perplexity APIは従量課金（1件約$0.01-0.05）
-- 大量チェック時はコスト注意
+- 大量チェック時はコスト注意（属性調査のコスト概算UI参照）
 - 信頼度60%未満は手動確認推奨
+- 新規参入候補は**必ず手動確認してからエクスポート**
 
 ---
 
@@ -228,11 +270,16 @@ streamlit run app_v3.py
 - `gemini-2.5-flash` を使用（2.0は廃止予定）
 - `google-genai` パッケージを更新
 
+### Q: asyncio.run() エラー
+**A**: Streamlit環境でasyncioループが衝突する場合あり。
+- 直接 `asyncio.run()` で呼び出し（`nest_asyncio` 不要）
+- Playwright併用時は非同期ループの競合に注意
+
 ---
 
 ## 9. コンタクト
 
-- **開発**: Claude Opus 4.5 (AI)
+- **開発**: Claude Opus 4.6 (AI)
 - **運用**: たいむさん
 - **リポジトリ**: プライベート（GitHub）
 

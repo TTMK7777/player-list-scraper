@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import StoreInvestigationResult
+from core.sanitizer import sanitize_input
 
 
 class InvestigationMode(Enum):
@@ -93,27 +94,11 @@ class StoreInvestigator:
         return self._scraper
 
     def _sanitize_input(self, text: str) -> str:
-        """入力をサニタイズ（プロンプトインジェクション対策）"""
-        if not text:
-            return ""
-
-        sanitized = text.strip()
-
-        # 危険なパターンを検出
-        for pattern in self.DANGEROUS_PATTERNS:
-            if re.search(pattern, sanitized, re.IGNORECASE):
-                # 危険なパターンを除去
-                sanitized = re.sub(pattern, "[REMOVED]", sanitized, flags=re.IGNORECASE)
-
-        # 特殊文字を正規化
-        sanitized = sanitized.replace("\r\n", "\n")
-        sanitized = re.sub(r"\n{3,}", "\n\n", sanitized)
-
-        # 長さ制限
-        if len(sanitized) > 500:
-            sanitized = sanitized[:500]
-
-        return sanitized
+        """
+        入力をサニタイズ（プロンプトインジェクション対策）
+        ※ 共通サニタイザー core.sanitizer.sanitize_input() に委譲
+        """
+        return sanitize_input(text)
 
     async def investigate(
         self,

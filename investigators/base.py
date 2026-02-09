@@ -8,7 +8,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 
 class AlertLevel(Enum):
@@ -294,4 +294,133 @@ class StoreInvestigationResult:
             "investigation_mode": self.investigation_mode,
             "notes": self.notes,
             "needs_verification": self.needs_verification,
+        }
+
+
+@dataclass
+class AttributeInvestigationResult:
+    """
+    属性調査結果（カテゴリ/ブランド共通）
+
+    【フィールド説明】
+    - player_name: 調査対象のプレイヤー名
+    - attribute_matrix: 属性名 → True/False/None (○/×/?) のマッピング
+    - confidence: 信頼度 (0.0-1.0)
+    - source_urls: 情報源URL
+    - investigation_date: 調査実行日時
+    - needs_verification: 手動確認が必要かどうか
+    - raw_response: LLMの生レスポンス（デバッグ用）
+    """
+    player_name: str
+    attribute_matrix: dict[str, Optional[bool]]  # 属性名 → ○(True)/×(False)/?(None)
+    confidence: float
+    source_urls: list[str] = field(default_factory=list)
+    investigation_date: datetime = field(default_factory=datetime.now)
+    needs_verification: bool = False
+    raw_response: str = ""
+
+    @classmethod
+    def create_success(
+        cls,
+        player_name: str,
+        attribute_matrix: dict[str, Optional[bool]],
+        confidence: float = 0.9,
+        source_urls: Optional[list[str]] = None,
+    ) -> "AttributeInvestigationResult":
+        """成功した調査結果を作成"""
+        return cls(
+            player_name=player_name,
+            attribute_matrix=attribute_matrix,
+            confidence=confidence,
+            source_urls=source_urls or [],
+            investigation_date=datetime.now(),
+            needs_verification=False,
+        )
+
+    @classmethod
+    def create_uncertain(
+        cls,
+        player_name: str,
+        attribute_matrix: Optional[dict[str, Optional[bool]]] = None,
+        reason: str = "",
+        raw_response: str = "",
+    ) -> "AttributeInvestigationResult":
+        """要確認の調査結果を作成"""
+        return cls(
+            player_name=player_name,
+            attribute_matrix=attribute_matrix or {},
+            confidence=0.3,
+            source_urls=[],
+            investigation_date=datetime.now(),
+            needs_verification=True,
+            raw_response=raw_response,
+        )
+
+    @classmethod
+    def create_error(
+        cls,
+        player_name: str,
+        error_message: str = "",
+    ) -> "AttributeInvestigationResult":
+        """エラー結果を作成"""
+        return cls(
+            player_name=player_name,
+            attribute_matrix={},
+            confidence=0.0,
+            source_urls=[],
+            investigation_date=datetime.now(),
+            needs_verification=True,
+            raw_response=f"エラー: {error_message}",
+        )
+
+    def to_dict(self) -> dict:
+        """辞書形式に変換"""
+        return {
+            "player_name": self.player_name,
+            "attribute_matrix": self.attribute_matrix,
+            "confidence": self.confidence,
+            "source_urls": self.source_urls,
+            "investigation_date": self.investigation_date.isoformat() if self.investigation_date else "",
+            "needs_verification": self.needs_verification,
+        }
+
+
+@dataclass
+class NewcomerCandidate:
+    """
+    新規参入プレイヤー候補
+
+    【フィールド説明】
+    - player_name: 候補プレイヤー名
+    - official_url: 公式サイトURL
+    - company_name: 運営会社名
+    - entry_date_approx: 推定参入時期（"2025-06" 等）
+    - confidence: 信頼度 (0.0-1.0)
+    - source_urls: 情報源URL
+    - reason: 新規参入と判断した理由
+    - verification_status: 検証ステータス ("verified"/"unverified"/"url_error")
+    - url_verified: URL存在確認済みか
+    """
+    player_name: str
+    official_url: str = ""
+    company_name: str = ""
+    entry_date_approx: str = ""
+    confidence: float = 0.0
+    source_urls: list[str] = field(default_factory=list)
+    reason: str = ""
+    verification_status: str = "unverified"  # "verified" / "unverified" / "url_error"
+    url_verified: bool = False
+
+    def to_dict(self) -> dict:
+        """辞書形式に変換"""
+        return {
+            "player_name": self.player_name,
+            "official_url": self.official_url,
+            "company_name": self.company_name,
+            "entry_date_approx": self.entry_date_approx,
+            "confidence": self.confidence,
+            "source_urls": self.source_urls,
+            "reason": self.reason,
+            "verification_status": self.verification_status,
+            "url_verified": self.url_verified,
         }
