@@ -12,7 +12,7 @@ from pathlib import Path
 # プロジェクトルートをパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.async_helpers import run_async, _run_in_new_loop
+from core.async_helpers import run_async, _run_in_new_loop, optimal_concurrency
 
 
 class TestRunAsync:
@@ -56,6 +56,44 @@ class TestRunAsync:
 
         with pytest.raises(ValueError, match="test error"):
             run_async(failing_coro())
+
+
+class TestOptimalConcurrency:
+    """optimal_concurrency() のテスト"""
+
+    def test_zero_total(self):
+        """total=0 のとき1を返す"""
+        assert optimal_concurrency(0) == 1
+
+    def test_negative_total(self):
+        """negative total のとき1を返す"""
+        assert optimal_concurrency(-5) == 1
+
+    def test_single_item(self):
+        """total=1 のとき1を返す"""
+        assert optimal_concurrency(1) == 1
+
+    def test_small_total(self):
+        """total<=5 のとき min(total, 5) を返す"""
+        assert optimal_concurrency(3) == 3
+        assert optimal_concurrency(5) == 5
+
+    def test_medium_total(self):
+        """total 6-20 のとき3を返す"""
+        assert optimal_concurrency(6) == 3
+        assert optimal_concurrency(10) == 3
+        assert optimal_concurrency(20) == 3
+
+    def test_large_total(self):
+        """total 21-100 のとき2を返す"""
+        assert optimal_concurrency(21) == 2
+        assert optimal_concurrency(50) == 2
+        assert optimal_concurrency(100) == 2
+
+    def test_very_large_total(self):
+        """total>100 のとき1を返す"""
+        assert optimal_concurrency(101) == 1
+        assert optimal_concurrency(500) == 1
 
 
 class TestRunInNewLoop:

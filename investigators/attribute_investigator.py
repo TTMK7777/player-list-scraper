@@ -62,10 +62,11 @@ class AttributeInvestigator:
         self.model = model
 
     def _get_llm_client(self):
-        """LLMクライアントを取得（遅延初期化）"""
+        """LLMクライアントを取得（遅延初期化、キャッシュ有効）"""
         if self.llm is None:
-            from core.llm_client import get_default_client
-            self.llm = get_default_client()
+            from core.llm_client import LLMClient
+            # 属性調査は静的情報なのでキャッシュ有効
+            self.llm = LLMClient(enable_cache=True)
         return self.llm
 
     def _optimal_batch_size(self, attribute_count: int) -> int:

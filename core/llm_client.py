@@ -58,13 +58,20 @@ class LLMClient:
         self,
         api_key: str = None,
         provider: str = "perplexity",
+        enable_cache: bool = False,
     ):
         """
         Args:
             api_key: API キー（未指定時は環境変数から取得）
             provider: LLMプロバイダー ("perplexity" or "gemini")
+            enable_cache: レスポンスキャッシュを有効化（デフォルト無効）
         """
         self.provider = provider
+        self._cache = None
+
+        if enable_cache:
+            from core.llm_cache import LLMCache
+            self._cache = LLMCache(ttl_seconds=3600, max_size=500)
 
         if provider == "perplexity":
             self.api_key = api_key or os.getenv("PERPLEXITY_API_KEY")
@@ -97,12 +104,28 @@ class LLMClient:
         Returns:
             生成されたテキスト
         """
+        # キャッシュチェック（有効時のみ）
+        cache_key = None
+        if self._cache is not None:
+            full_prompt = f"{system_prompt or ''}|{prompt}"
+            cache_key = self._cache.make_key(full_prompt, model or "", temperature)
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                return cached
+
+        # API呼び出し
         if self.provider == "perplexity":
-            return self._call_perplexity(prompt, model, temperature, max_tokens, system_prompt)
+            result = self._call_perplexity(prompt, model, temperature, max_tokens, system_prompt)
         elif self.provider == "gemini":
-            return self._call_gemini(prompt, model, temperature, max_tokens, system_prompt)
+            result = self._call_gemini(prompt, model, temperature, max_tokens, system_prompt)
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
+
+        # キャッシュに保存（有効時のみ）
+        if self._cache is not None and cache_key is not None:
+            self._cache.set(cache_key, result)
+
+        return result
 
     def _call_perplexity(
         self,

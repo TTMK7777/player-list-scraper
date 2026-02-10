@@ -24,6 +24,28 @@ from typing import TypeVar
 
 T = TypeVar("T")
 
+
+def optimal_concurrency(total: int) -> int:
+    """プレイヤー数に応じた最適並列数を返す
+
+    Args:
+        total: 処理対象の総数
+
+    Returns:
+        推奨同時実行数
+    """
+    if total <= 0:
+        return 1
+    elif total <= 5:
+        return total           # 少数: 全並列OK
+    elif total <= 20:
+        return 3               # 中規模: 標準
+    elif total <= 100:
+        return 2               # 大規模: レート制限考慮
+    else:
+        return 1               # 超大規模: 安全優先
+
+
 # 共有のスレッドプールエグゼキュータ（デーモンスレッド）
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="async_runner")
 

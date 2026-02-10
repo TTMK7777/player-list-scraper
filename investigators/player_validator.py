@@ -46,6 +46,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from core.async_helpers import optimal_concurrency
 from core.llm_client import LLMClient, get_default_client
 from core.excel_handler import PlayerData
 from core.sanitizer import sanitize_input, verify_url
@@ -131,7 +132,7 @@ class PlayerValidator:
         players: list[PlayerData],
         industry: str = "",
         on_progress: Callable[[int, int, str], None] = None,
-        concurrency: int = 3,
+        concurrency: Optional[int] = None,
         delay_seconds: float = 1.0,
     ) -> list[ValidationResult]:
         """
@@ -141,7 +142,7 @@ class PlayerValidator:
             players: PlayerData のリスト
             industry: 業界（全プレイヤー共通）
             on_progress: 進捗コールバック (current, total, player_name)
-            concurrency: 同時実行数
+            concurrency: 同時実行数（None時は自動決定）
             delay_seconds: リクエスト間の遅延（秒）
 
         Returns:
@@ -149,6 +150,10 @@ class PlayerValidator:
         """
         results = []
         total = len(players)
+
+        # 並列数を自動決定（未指定時）
+        if concurrency is None:
+            concurrency = optimal_concurrency(total)
 
         # セマフォで同時実行数を制限
         semaphore = asyncio.Semaphore(concurrency)

@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import StoreInvestigationResult
+from core.async_helpers import optimal_concurrency
 from core.sanitizer import sanitize_input
 from core.safe_parse import safe_float
 
@@ -78,10 +79,11 @@ class StoreInvestigator:
         self._scraper = None  # 遅延初期化
 
     def _get_llm_client(self):
-        """LLMクライアントを取得（遅延初期化）"""
+        """LLMクライアントを取得（遅延初期化、キャッシュ有効）"""
         if self.llm is None:
-            from core.llm_client import get_default_client
-            self.llm = get_default_client()
+            from core.llm_client import LLMClient
+            # 店舗調査は短時間で変わらないのでキャッシュ有効
+            self.llm = LLMClient(enable_cache=True)
         return self.llm
 
     def _get_scraper(self):
@@ -528,7 +530,7 @@ class StoreInvestigator:
         companies: list[dict],
         mode: InvestigationMode = InvestigationMode.AI,
         on_progress: Optional[Callable[[int, int, str], None]] = None,
-        concurrency: int = 2,
+        concurrency: Optional[int] = None,
         delay_seconds: float = 1.0,
     ) -> list[StoreInvestigationResult]:
         """
@@ -538,7 +540,7 @@ class StoreInvestigator:
             companies: 調査対象リスト [{"company_name": "...", "official_url": "...", "industry": "..."}, ...]
             mode: 調査モード
             on_progress: 進捗コールバック (current, total, company_name)
-            concurrency: 同時実行数
+            concurrency: 同時実行数（None時は自動決定）
             delay_seconds: リクエスト間隔（秒）
 
         Returns:
@@ -546,6 +548,10 @@ class StoreInvestigator:
         """
         results = []
         total = len(companies)
+
+        # 並列数を自動決定（未指定時）
+        if concurrency is None:
+            concurrency = optimal_concurrency(total)
 
         # セマフォで同時実行数を制限
         semaphore = asyncio.Semaphore(concurrency)

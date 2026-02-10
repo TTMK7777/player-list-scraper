@@ -191,6 +191,66 @@ POSTAL_PREF_MAP = {
 }
 
 
+def extract_full_address(text: str) -> str:
+    """テキストから完全な住所を抽出する
+
+    住所パターン: 〒XXX-XXXX + 都道府県 + 市区町村 + 番地
+    複数行にまたがる場合や、電話番号等が混在する場合に分離する。
+
+    Args:
+        text: 住所を含むテキスト
+
+    Returns:
+        抽出された住所文字列。見つからない場合は空文字列
+    """
+    if not text:
+        return ""
+
+    # パターン1: 〒付き完全住所（最も正確）
+    # 郵便番号 + 都道府県 + 市区町村 + 番地（電話番号/営業時間の前まで）
+    m = re.search(
+        r'(〒[\d\-]+\s*'           # 郵便番号
+        r'[^\d]{2,80}?)'           # 都道府県+住所（非数字で始まる）
+        r'(?:\s*(?:TEL|tel|電話|営業|定休|FAX|fax|[0-9]{2,4}[\-\(])|$)',
+        text,
+    )
+    if m:
+        return m.group(1).strip()
+
+    # パターン2: 都道府県名から始まる住所
+    for pref in PREFECTURES:
+        idx = text.find(pref)
+        if idx >= 0:
+            # 都道府県名の前に郵便番号があるかチェック
+            prefix_text = text[max(0, idx - 15):idx]
+            postal_match = re.search(r'〒[\d\-]+\s*$', prefix_text)
+
+            start = idx
+            if postal_match:
+                start = max(0, idx - 15) + postal_match.start()
+
+            # 住所の終端を探す（電話番号やTEL等の前）
+            rest = text[idx:]
+            end_match = re.search(
+                r'(?:TEL|tel|電話|営業|定休|FAX|fax|\n|\r)',
+                rest,
+            )
+            if end_match:
+                addr = text[start:idx + end_match.start()].strip()
+            else:
+                addr = text[start:start + 100].strip()
+
+            if len(addr) > 8:
+                return addr
+
+    # パターン3: 郵便番号のみ
+    m = re.search(r'(〒[\d\-]+\s*.{5,80})', text)
+    if m:
+        return m.group(1).strip()[:100]
+
+    return ""
+
+
 def extract_prefecture(text: str) -> str:
     """テキストから都道府県を抽出（郵便番号からの推測付き）"""
     if not text:
@@ -207,7 +267,7 @@ def extract_prefecture(text: str) -> str:
         if short in text and len(short) >= 2:
             return PREFECTURES[i]
 
-    # 方法3: 郵便番号から推測
+    # 方法3: 郵便番号から推測（core.postal_prefecture モジュール使用）
     postal_match = re.search(r"〒?(\d{3})-?(\d{4})", text)
     if postal_match:
         prefix = postal_match.group(1)
@@ -802,7 +862,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
             # 親を複数階層辿って、完全な住所を取得
             current = address_elem.parent
             full_address = ""
-            for _ in range(3):  # 最大3階層まで辿る
+            for _ in range(4):  # 最大4階層まで辿る（v6.1: 3→4に拡大）
                 if current:
                     text = current.get_text(separator=' ', strip=True)
                     # 住所として妥当か判定（郵便番号 + 都道府県名を含む）
@@ -814,28 +874,39 @@ class StaticHTMLStrategy(ScrapingStrategy):
                         full_address = text
                         break
                     current = current.parent if hasattr(current, 'parent') else None
-            
+
             if full_address:
-                # 住所部分だけを抽出（電話番号や営業時間の前まで）
-                # パターン: 〒XXX-XXXX + 都道府県 + 市区町村 + 番地
-                addr_match = re.search(r'(〒[\d\-]+\s*[^\d]{5,80}?)(?:\s*(?:TEL|tel|電話|営業|定休|[0-9]{2,4}[\-\(]))', full_address)
-                if addr_match:
-                    data["address"] = addr_match.group(1).strip()
+                # extract_full_address で住所部分だけを抽出
+                extracted = extract_full_address(full_address)
+                if extracted:
+                    data["address"] = extracted
                 else:
-                    # 住所が長すぎる場合は適度な長さで切る
-                    data["address"] = full_address[:100].strip()
+                    # フォールバック: 正規表現で分離
+                    addr_match = re.search(
+                        r'(〒[\d\-]+\s*[^\d]{5,80}?)'
+                        r'(?:\s*(?:TEL|tel|電話|営業|定休|FAX|fax|[0-9]{2,4}[\-\(]))',
+                        full_address,
+                    )
+                    if addr_match:
+                        data["address"] = addr_match.group(1).strip()
+                    else:
+                        data["address"] = full_address[:100].strip()
             else:
                 # フォールバック: 直接の親要素を使用
                 parent = address_elem.parent
                 if parent:
-                    data["address"] = parent.get_text(separator=' ', strip=True)[:100]
+                    raw_text = parent.get_text(separator=' ', strip=True)[:200]
+                    extracted = extract_full_address(raw_text)
+                    data["address"] = extracted if extracted else raw_text[:100]
         else:
             # 住所クラスを探す
             addr_classes = [r'address', r'addr', r'-addr', r'shop.*addr']
             for cls_pattern in addr_classes:
                 addr_elem = card.find(class_=re.compile(cls_pattern, re.IGNORECASE))
                 if addr_elem:
-                    data["address"] = addr_elem.get_text(separator=' ', strip=True)[:100]
+                    raw_text = addr_elem.get_text(separator=' ', strip=True)[:200]
+                    extracted = extract_full_address(raw_text)
+                    data["address"] = extracted if extracted else raw_text[:100]
                     break
 
         # 電話番号
