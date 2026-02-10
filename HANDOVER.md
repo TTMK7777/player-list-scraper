@@ -1,8 +1,8 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-02-09
+> **最終更新**: 2026-02-10
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.0
+> **バージョン**: v6.1
 
 ---
 
@@ -56,10 +56,14 @@
 │
 ├── core/                  # コアモジュール
 │   ├── __init__.py
+│   ├── async_helpers.py   # 非同期ヘルパー・動的並列化 (v6.0.1 NEW)
 │   ├── excel_handler.py   # Excel読み書き + AttributeInvestigationExporter
 │   ├── llm_client.py      # LLMクライアント（Perplexity/Gemini）
+│   ├── llm_cache.py       # LLMレスポンスキャッシュ (TTL付き) (v6.1 NEW)
 │   ├── sanitizer.py       # 入力サニタイザー共通化 (v6.0 NEW)
+│   ├── safe_parse.py      # 安全な型変換 (v6.0.1 NEW)
 │   ├── attribute_presets.py # 属性プリセット定義 (v6.0 NEW)
+│   ├── postal_prefecture.py # 郵便番号→都道府県変換 (v6.1 NEW)
 │   ├── check_history.py   # チェック履歴管理 + 差分計算 (v6.0 NEW)
 │   └── check_workflow.py  # 3段階ワークフロー管理 (v6.0 NEW)
 │
@@ -74,19 +78,28 @@
 ├── ui/                    # UIモジュール (v6.0 NEW)
 │   ├── __init__.py
 │   ├── common.py          # 共通UIコンポーネント
+│   ├── validation_tab.py  # 正誤チェックタブ (v6.1 NEW)
+│   ├── store_tab.py       # 店舗調査タブ (v6.1 NEW)
 │   ├── attribute_tab.py   # 属性調査タブ
 │   ├── newcomer_tab.py    # 新規参入検出タブ
 │   └── workflow_tab.py    # 3段階チェックタブ
 │
-├── tests/                 # テスト
+├── tests/                 # テスト (325件)
 │   ├── conftest.py
-│   ├── test_sanitizer.py       # サニタイザーテスト (v6.0 NEW)
-│   ├── test_attribute_investigator.py # 属性調査テスト (v6.0 NEW)
-│   ├── test_newcomer_detector.py # 新規参入検出テスト (v6.0 NEW)
-│   ├── test_check_history.py    # 履歴管理テスト (v6.0 NEW)
-│   ├── test_check_workflow.py   # ワークフローテスト (v6.0 NEW)
-│   ├── test_player_validator.py
-│   └── ...
+│   ├── test_async_helpers.py    # 非同期ヘルパーテスト
+│   ├── test_attribute_investigator.py # 属性調査テスト
+│   ├── test_check_history.py    # 履歴管理テスト
+│   ├── test_check_workflow.py   # ワークフローテスト
+│   ├── test_excel_handler.py    # Excel処理テスト
+│   ├── test_llm_cache.py        # LLMキャッシュテスト (v6.1 NEW)
+│   ├── test_llm_client.py       # LLMクライアントテスト
+│   ├── test_newcomer_detector.py # 新規参入検出テスト
+│   ├── test_player_validator.py # 正誤チェックテスト
+│   ├── test_postal_prefecture.py # 郵便番号テスト (v6.1 NEW)
+│   ├── test_safe_parse.py       # 安全な型変換テスト
+│   ├── test_sanitizer.py        # サニタイザーテスト
+│   ├── test_store_investigator.py # 店舗調査テスト
+│   └── test_store_scraper_pages_visited.py # ページ訪問カウントテスト
 │
 ├── docs/                  # ドキュメント・本番データ
 │   └── プレイヤーリスト/  # ★本番Excel（gitignore対象）
@@ -131,7 +144,7 @@ pip install -r requirements.txt
 
 ## 4. 起動方法
 
-### v6.0（統合版）★推奨
+### v6.1（統合版）★推奨
 ```bash
 streamlit run app_v5.py
 ```
@@ -194,6 +207,35 @@ streamlit run app_v5.py
 
 ## 6. 変更履歴
 
+### v6.1 (2026-02-10) - UI分離・品質改善
+
+#### UI分離
+- `ui/validation_tab.py` - 正誤チェックUIをapp_v5.pyから分離
+- `ui/store_tab.py` - 店舗調査UIをapp_v5.pyから分離
+- attribute_tab.py のパターンに準拠した統一設計
+
+#### LLMキャッシュ
+- `core/llm_cache.py` - TTL付きインメモリキャッシュ（スレッドセーフ）
+- 属性調査・店舗調査（AIモード）で有効化、正誤チェック・新規参入検出は対象外（opt-in方式）
+
+#### 動的並列化
+- `core/async_helpers.py` に `optimal_concurrency()` 追加
+- プレイヤー数に応じた最適並列数を自動決定
+
+#### 住所精度改善
+- `core/postal_prefecture.py` - 郵便番号上位3桁→都道府県マッピング
+- 全47都道府県対応、〒付き・スペース付き形式に対応
+
+#### テスト
+- `test_llm_cache.py` (18件) + `test_postal_prefecture.py` (26件+47パラメータ化) 追加
+- 合計: 325件（v6.0.1の213件 → 310件 → 325件）
+
+### v6.0.1 (2026-02-09) - バグ修正
+- 18件のバグ修正
+- `core/safe_parse.py` 追加（安全な型変換）
+- `core/async_helpers.py` 追加（非同期ヘルパー）
+- テスト213件
+
 ### v6.0 (2026-02-09) - 4機能追加
 
 #### Phase 0: 共通基盤
@@ -240,10 +282,10 @@ streamlit run app_v5.py
 ## 7. 既知の課題・今後の拡張
 
 ### 7.1 改善候補
-- [ ] バッチ処理の並列化強化
-- [ ] キャッシュ機能（重複調査防止）
+- [x] バッチ処理の並列化強化（v6.1: 動的並列化 optimal_concurrency 実装済み）
+- [x] キャッシュ機能（v6.1: LLMCache 実装済み、TTL付きインメモリキャッシュ）
 - [ ] Slack/Teams通知連携
-- [ ] UIの既存タブ（正誤チェック、店舗調査）も `ui/` モジュールに分離
+- [x] UIの既存タブ（正誤チェック、店舗調査）も `ui/` モジュールに分離（v6.1: 実装済み）
 
 ### 7.2 注意事項
 - Perplexity APIは従量課金（1件約$0.01-0.05）

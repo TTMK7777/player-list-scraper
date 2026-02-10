@@ -20,6 +20,7 @@ from core.excel_handler import ExcelHandler, StoreInvestigationExporter
 from core.llm_client import LLMClient
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
+from ui.common import display_progress_log, display_filter_multiselect
 
 
 # ====================================
@@ -35,16 +36,12 @@ async def _run_investigation(
 ) -> list[StoreInvestigationResult]:
     """店舗調査を実行"""
 
-    logs = []
+    logs: list[str] = []
 
-    def on_progress(current: int, total: int, name: str):
+    def on_progress(current: int, total: int, name: str) -> None:
         log_msg = f"[{current}/{total}] 調査中: {name}"
         logs.append(log_msg)
-        log_text = "\n".join(logs[-15:])
-        progress_container.markdown(
-            f'<div class="progress-log">{log_text}</div>',
-            unsafe_allow_html=True
-        )
+        display_progress_log(logs, progress_container)
 
     model_label = "精密" if ai_model == "sonar-deep-research" else "高速"
     status_container.info(f"🏪 {len(companies)}件の企業を調査中... (モード: {model_label})")
@@ -98,10 +95,54 @@ def _display_summary(results: list[StoreInvestigationResult]):
         st.metric("⚠️ 要確認", f"{need_verify}件")
 
 
-def _display_table(results: list[StoreInvestigationResult]):
-    """店舗調査結果テーブルを表示"""
+def _display_table(results: list[StoreInvestigationResult]) -> None:
+    """店舗調査結果テーブルをフィルター付きで表示。
 
-    sorted_results = sorted(results, key=lambda r: (r.needs_verification, -(r.confidence or 0)))
+    Args:
+        results: 店舗調査結果のリスト。
+    """
+    # --- フィルター ---
+    confidence_options = ["高信頼度 (80%以上)", "中信頼度 (50-79%)", "低信頼度 (50%未満)"]
+    col_filter1, col_filter2 = st.columns(2)
+
+    with col_filter1:
+        selected_confidence = display_filter_multiselect(
+            "信頼度で絞り込み",
+            options=confidence_options,
+            key="store_filter_confidence",
+        )
+
+    with col_filter2:
+        show_verify_only = st.checkbox(
+            "要確認のみ表示",
+            value=False,
+            key="store_filter_verify",
+        )
+
+    # --- フィルター適用 ---
+    def _confidence_matches(conf: float) -> bool:
+        """信頼度がフィルター条件に合致するか判定する。"""
+        if conf >= 0.8 and "高信頼度 (80%以上)" in selected_confidence:
+            return True
+        if 0.5 <= conf < 0.8 and "中信頼度 (50-79%)" in selected_confidence:
+            return True
+        if conf < 0.5 and "低信頼度 (50%未満)" in selected_confidence:
+            return True
+        return False
+
+    filtered_results = [
+        r for r in results
+        if _confidence_matches(r.confidence or 0)
+        and (not show_verify_only or r.needs_verification)
+    ]
+
+    st.caption(f"表示中: {len(filtered_results)} / {len(results)} 件")
+
+    # --- ソート & テーブル表示 ---
+    sorted_results = sorted(
+        filtered_results,
+        key=lambda r: (r.needs_verification, -(r.confidence or 0)),
+    )
 
     data = []
     for result in sorted_results:
@@ -131,7 +172,7 @@ def _display_table(results: list[StoreInvestigationResult]):
             "信頼度": st.column_config.TextColumn("信頼度", width="small"),
             "要確認": st.column_config.TextColumn("要確認", width="small"),
             "ソースURL": st.column_config.TextColumn("ソースURL", width="large"),
-        }
+        },
     )
 
 

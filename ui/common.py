@@ -42,6 +42,33 @@ def display_verification_badge(status: str) -> str:
     return badges.get(status, badges["unverified"])
 
 
+def display_filter_multiselect(
+    label: str,
+    options: list[str],
+    default: list[str] | None = None,
+    key: str | None = None,
+) -> list[str]:
+    """フィルター用のmultiselectを表示し、選択された値を返す。
+
+    Args:
+        label: ラベル文字列。
+        options: 選択肢のリスト。
+        default: デフォルト選択値。Noneの場合は全選択。
+        key: Streamlit widget key。
+
+    Returns:
+        選択された値のリスト。
+    """
+    if default is None:
+        default = options
+    return st.multiselect(
+        label,
+        options=options,
+        default=default,
+        key=key,
+    )
+
+
 def export_to_excel_bytes(exporter, results, **kwargs) -> bytes:
     """Excelエクスポーターを使ってバイト列を生成"""
     buffer = io.BytesIO()

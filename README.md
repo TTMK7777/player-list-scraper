@@ -1,4 +1,4 @@
-# プレイヤーリスト調査システム v6.0
+# プレイヤーリスト調査システム v6.1
 
 オリコン業務向けの**プレイヤーリスト調査・正誤チェック自動化ツール**。
 
@@ -24,9 +24,9 @@
 - 業界別の最新参入情報を取得
 
 ### 5. 3段階チェック（ワークフロー）
-- Phase 1: 自動チェック（LLM）
-- Phase 2: URL検証（HTTP HEAD）
-- Phase 3: 人手確認サポート
+- Phase 1: 実査前チェック（正誤全件 + 新規参入 + 属性全件）
+- Phase 2: ランキング確定時チェック（正誤全件 + 属性変更分）
+- Phase 3: 発表前チェック（CRITICALのみ再検証 + 最終確認）
 
 ---
 
@@ -80,22 +80,23 @@ start.bat
 ├── app_v5.py                    # 統合GUI (全5機能)
 │
 ├── core/                        # コアモジュール
-│   ├── async_helpers.py         # 非同期ヘルパー (run_async)
+│   ├── async_helpers.py         # 非同期ヘルパー (run_async, 動的並列化)
 │   ├── excel_handler.py         # Excel読み書き
 │   ├── llm_client.py            # LLMクライアント (Perplexity/Gemini)
-│   ├── llm_cache.py             # LLMレスポンスキャッシュ
+│   ├── llm_cache.py             # LLMレスポンスキャッシュ (TTL付き)
 │   ├── sanitizer.py             # 入力サニタイザー
 │   ├── safe_parse.py            # 安全な型変換
 │   ├── attribute_presets.py     # 属性調査プリセット
-│   └── postal_prefecture.py     # 郵便番号→都道府県変換
+│   ├── postal_prefecture.py     # 郵便番号→都道府県変換
+│   ├── check_history.py         # チェック履歴管理 + 差分計算
+│   └── check_workflow.py        # 3段階ワークフロー管理
 │
 ├── investigators/               # 調査モジュール
 │   ├── base.py                  # データ型定義
 │   ├── player_validator.py      # 正誤チェッカー
 │   ├── store_investigator.py    # 店舗調査エンジン
 │   ├── attribute_investigator.py # 属性調査エンジン
-│   ├── newcomer_detector.py     # 新規参入検出
-│   └── check_workflow.py        # 3段階チェックワークフロー
+│   └── newcomer_detector.py     # 新規参入検出
 │
 ├── ui/                          # UIモジュール
 │   ├── common.py                # 共通コンポーネント
@@ -107,18 +108,22 @@ start.bat
 │
 ├── store_scraper_v3.py          # 店舗スクレイピングエンジン
 │
-├── tests/                       # テストスイート (pytest)
+├── tests/                       # テストスイート (pytest, 325件)
 │   ├── conftest.py              # 共通フィクスチャ
 │   ├── test_async_helpers.py
-│   ├── test_excel_handler.py
-│   ├── test_llm_client.py
-│   ├── test_llm_cache.py
-│   ├── test_player_validator.py
-│   ├── test_store_investigator.py
 │   ├── test_attribute_investigator.py
+│   ├── test_check_history.py
+│   ├── test_check_workflow.py
+│   ├── test_excel_handler.py
+│   ├── test_llm_cache.py
+│   ├── test_llm_client.py
 │   ├── test_newcomer_detector.py
+│   ├── test_player_validator.py
 │   ├── test_postal_prefecture.py
-│   └── ...
+│   ├── test_safe_parse.py
+│   ├── test_sanitizer.py
+│   ├── test_store_investigator.py
+│   └── test_store_scraper_pages_visited.py
 │
 ├── HANDOVER.md                  # 引き継ぎドキュメント
 ├── pytest.ini                   # pytest設定
@@ -154,8 +159,9 @@ pytest tests/ --cov=. --cov-report=html
 
 | Ver | 日付 | 変更内容 |
 |-----|------|---------|
-| **v6.1** | 2026-02-10 | UI分離、LLMキャッシュ、動的並列化、住所精度改善 |
-| **v6.0** | 2026-02-09 | 18件バグ修正、safe_parse/async_helpers追加、テスト213件 |
+| **v6.1** | 2026-02-10 | UI分離(validation_tab/store_tab)、LLMキャッシュ、動的並列化、住所精度改善、テスト310件 |
+| **v6.0.1** | 2026-02-09 | 18件バグ修正、safe_parse/async_helpers追加、テスト213件 |
+| **v6.0** | 2026-02-09 | 4機能追加（属性調査、新規参入検出、3段階チェック、UIモジュール化） |
 | **v5.1** | 2026-02-07 | 店舗調査精度向上、属性調査バッチ化 |
 | **v5.0** | 2026-02-06 | v3+v4統合、属性調査・新規参入検出・3段階チェック追加 |
 | **v4.1** | 2026-02-05 | コード品質改善、pytest導入、フォルダ整理 |

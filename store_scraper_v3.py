@@ -373,6 +373,22 @@ class ScrapingStrategy(ABC):
 
     name: str = "base"
 
+    def __init__(self) -> None:
+        self._pages_visited: int = 0
+
+    def _count_page_visit(self) -> None:
+        """ページアクセスをカウント"""
+        self._pages_visited += 1
+
+    def reset_page_count(self) -> None:
+        """ページカウンターをリセット"""
+        self._pages_visited = 0
+
+    @property
+    def pages_visited(self) -> int:
+        """訪問ページ数を返す"""
+        return self._pages_visited
+
     @abstractmethod
     async def scrape(
         self,
@@ -553,6 +569,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
         response = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=30
         )
+        self._count_page_visit()
         response.encoding = response.apparent_encoding
         html = response.text
         soup = BeautifulSoup(html, "html.parser")
@@ -1048,6 +1065,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
                 # Step 1: トップページにアクセス
                 log(f"ページを読み込み中: {url}")
                 await page.goto(url, timeout=30000, wait_until="networkidle")
+                self._count_page_visit()
                 await asyncio.sleep(2)
 
                 # Step 2: 店舗ページへのリンクを探す
@@ -1072,6 +1090,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
 
                         if link != url:
                             await page.goto(link, timeout=30000, wait_until="networkidle")
+                            self._count_page_visit()
                             await asyncio.sleep(1)
 
                         # 都道府県リンクがあれば巡回
@@ -1086,6 +1105,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
 
                                 try:
                                     await page.goto(pref_link, timeout=30000, wait_until="networkidle")
+                                    self._count_page_visit()
                                     await asyncio.sleep(0.5)
 
                                     html = await page.content()
@@ -1295,6 +1315,7 @@ class AIInferenceStrategy(ScrapingStrategy):
         response = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=30
         )
+        self._count_page_visit()
         response.encoding = response.apparent_encoding
         html = response.text
 
@@ -1349,6 +1370,7 @@ class AIInferenceStrategy(ScrapingStrategy):
             response = await asyncio.to_thread(
                 requests.get, api_url, headers=HEADERS, timeout=30
             )
+            self._count_page_visit()
             data = response.json()
 
             # LLMでデータを解析
@@ -1397,6 +1419,7 @@ class AIInferenceStrategy(ScrapingStrategy):
         html_resp = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=30
         )
+        self._count_page_visit()
         html_resp.encoding = html_resp.apparent_encoding
         return await static._extract_stores_with_llm(html_resp.text, company_name, url, llm)
 
@@ -1521,6 +1544,10 @@ class MultiStrategyScraper:
         strategy_used = ""
         errors = []
 
+        # 前回の scrape() のカウントをリセット
+        for strategy in self.strategies:
+            strategy.reset_page_count()
+
         def log(msg: str):
             if on_progress:
                 on_progress(msg)
@@ -1570,12 +1597,15 @@ class MultiStrategyScraper:
 
         elapsed = time.time() - start_time
 
+        # 全戦略の訪問ページ数を合算
+        total_pages_visited = sum(s.pages_visited for s in self.strategies)
+
         return ScrapingResult(
             company_name=company_name,
             url=url,
             stores=unique_stores,
             strategy_used=strategy_used,
-            pages_visited=0,  # TODO: 実装
+            pages_visited=total_pages_visited,
             elapsed_time=elapsed,
             errors=errors
         )

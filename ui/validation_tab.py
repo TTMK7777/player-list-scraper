@@ -11,8 +11,6 @@ import io
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-
 import pandas as pd
 import streamlit as st
 
@@ -21,6 +19,7 @@ from core.excel_handler import ExcelHandler, PlayerData
 from core.llm_client import LLMClient
 from investigators.base import AlertLevel, ValidationResult
 from investigators.player_validator import PlayerValidator
+from ui.common import display_progress_log, display_filter_multiselect
 
 
 # ====================================
@@ -35,16 +34,12 @@ async def _run_validation(
 ) -> list[ValidationResult]:
     """正誤チェックを実行"""
 
-    logs = []
+    logs: list[str] = []
 
-    def on_progress(current: int, total: int, name: str):
+    def on_progress(current: int, total: int, name: str) -> None:
         log_msg = f"[{current}/{total}] チェック中: {name}"
         logs.append(log_msg)
-        log_text = "\n".join(logs[-15:])
-        progress_container.markdown(
-            f'<div class="progress-log">{log_text}</div>',
-            unsafe_allow_html=True
-        )
+        display_progress_log(logs, progress_container)
 
     status_container.info(f"🔍 {len(players)}件のプレイヤーをチェック中...")
 
@@ -103,9 +98,40 @@ def _display_summary(results: list[ValidationResult]):
         st.metric("⚠️ 要確認", f"{uncertain_count}件")
 
 
-def _display_table(results: list[ValidationResult]):
-    """正誤チェック結果テーブルを表示"""
+def _display_table(results: list[ValidationResult]) -> None:
+    """正誤チェック結果テーブルをフィルター付きで表示。
 
+    Args:
+        results: 正誤チェック結果のリスト。
+    """
+    # --- フィルター ---
+    alert_labels = [level.value for level in AlertLevel]
+    col_filter1, col_filter2 = st.columns(2)
+
+    with col_filter1:
+        selected_alerts = display_filter_multiselect(
+            "アラートレベルで絞り込み",
+            options=alert_labels,
+            key="val_filter_alert",
+        )
+
+    with col_filter2:
+        show_manual_only = st.checkbox(
+            "要確認のみ表示",
+            value=False,
+            key="val_filter_manual",
+        )
+
+    # --- フィルター適用 ---
+    filtered_results = [
+        r for r in results
+        if r.alert_level.value in selected_alerts
+        and (not show_manual_only or r.needs_manual_review)
+    ]
+
+    st.caption(f"表示中: {len(filtered_results)} / {len(results)} 件")
+
+    # --- ソート & テーブル表示 ---
     alert_order = {
         AlertLevel.CRITICAL: 0,
         AlertLevel.WARNING: 1,
@@ -113,8 +139,8 @@ def _display_table(results: list[ValidationResult]):
         AlertLevel.OK: 3,
     }
     sorted_results = sorted(
-        results,
-        key=lambda r: (alert_order.get(r.alert_level, 4), not r.needs_manual_review)
+        filtered_results,
+        key=lambda r: (alert_order.get(r.alert_level, 4), not r.needs_manual_review),
     )
 
     data = []
@@ -143,7 +169,7 @@ def _display_table(results: list[ValidationResult]):
             "変更内容": st.column_config.TextColumn("変更内容", width="large"),
             "信頼度": st.column_config.TextColumn("信頼度", width="small"),
             "要確認": st.column_config.TextColumn("要確認", width="small"),
-        }
+        },
     )
 
 
