@@ -12,7 +12,7 @@ from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # モジュールパスを追加
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.excel_handler import ExcelHandler
 
@@ -26,7 +26,7 @@ def test_load():
     ]
 
     for file_path in test_files:
-        full_path = Path(__file__).parent / file_path
+        full_path = Path(__file__).parent.parent / file_path
         if not full_path.exists():
             print(f"❌ ファイルが見つかりません: {file_path}")
             continue

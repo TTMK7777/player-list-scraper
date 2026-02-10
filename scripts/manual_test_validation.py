@@ -13,7 +13,7 @@ from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # モジュールパスを追加
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.llm_client import get_available_providers, get_default_client
 from investigators.player_validator import PlayerValidator
