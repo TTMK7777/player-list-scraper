@@ -1,28 +1,24 @@
 @echo off
 chcp 65001 >nul
-title プレイヤーリスト調査システム - ランチャー
+title プレイヤーリスト調査システム v6 - ランチャー
 
 echo.
 echo ========================================
-echo   プレイヤーリスト調査システム
-echo   Launcher
+echo   プレイヤーリスト調査システム v6
+echo   統合版ランチャー
 echo ========================================
 echo.
-echo どのバージョンを起動しますか？
-echo.
-echo   [1] v4.1 正誤チェック（推奨）
-echo   [2] v3.0 店舗調査
-echo   [3] テスト実行
-echo   [4] 初回セットアップ
+echo   [1] アプリ起動（推奨）
+echo   [2] テスト実行
+echo   [3] 初回セットアップ
 echo   [Q] 終了
 echo.
 
-set /p choice="選択 (1/2/3/4/Q): "
+set /p choice="選択 (1/2/3/Q): "
 
-if /i "%choice%"=="1" goto v4
-if /i "%choice%"=="2" goto v3
-if /i "%choice%"=="3" goto test
-if /i "%choice%"=="4" goto install
+if /i "%choice%"=="1" goto app
+if /i "%choice%"=="2" goto test
+if /i "%choice%"=="3" goto install
 if /i "%choice%"=="Q" goto end
 if /i "%choice%"=="q" goto end
 
@@ -30,12 +26,8 @@ echo [ERROR] 無効な選択です
 pause
 goto end
 
-:v4
-call "%~dp0start_v4.bat"
-goto end
-
-:v3
-call "%~dp0start_v3.bat"
+:app
+call "%~dp0start_v5.bat"
 goto end
 
 :test

@@ -52,13 +52,13 @@ echo       OK
 echo.
 
 REM Playwright（v3用）
-echo [4/4] Playwright ブラウザのインストール（v3用）
+echo [4/4] Playwright ブラウザのインストール（店舗スクレイピング用）
 set /p install_pw="Playwrightブラウザをインストールしますか？ (y/N): "
 if /i "%install_pw%"=="y" (
     playwright install chromium
     echo       OK
 ) else (
-    echo       スキップ（v3を使わない場合は不要）
+    echo       スキップ（店舗調査のスクレイピング機能を使わない場合は不要）
 )
 echo.
 
@@ -73,7 +73,7 @@ echo      PERPLEXITY_API_KEY=pplx-xxxxx
 echo      GOOGLE_API_KEY=AIzaSy-xxxxx
 echo.
 echo   2. 起動:
-echo      start.bat または start_v4.bat
+echo      start.bat または start_v5.bat
 echo.
 
 pause
