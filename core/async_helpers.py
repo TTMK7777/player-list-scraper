@@ -19,10 +19,14 @@ nest_asyncio に依存せず、スレッド分離で安全性を担保する。
 """
 
 import asyncio
+import atexit
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 def optimal_concurrency(total: int) -> int:
@@ -46,8 +50,50 @@ def optimal_concurrency(total: int) -> int:
         return 1               # 超大規模: 安全優先
 
 
-# 共有のスレッドプールエグゼキュータ（デーモンスレッド）
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="async_runner")
+# 共有のスレッドプールエグゼキュータ（遅延初期化）
+_executor: ThreadPoolExecutor | None = None
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """遅延初期化でExecutorを取得する。
+
+    初回呼び出し時にThreadPoolExecutorを生成し、atexit でシャットダウンを登録する。
+    シャットダウン済みの場合は再生成する。
+
+    Returns:
+        ThreadPoolExecutor: 共有のスレッドプールエグゼキュータ
+    """
+    global _executor
+    if _executor is None or _executor._shutdown:
+        _executor = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="async_runner"
+        )
+        atexit.register(_cleanup_executor)
+        logger.debug("ThreadPoolExecutor を初期化しました")
+    return _executor
+
+
+def _cleanup_executor():
+    """Executor をシャットダウンする（内部用）。"""
+    global _executor
+    if _executor is not None:
+        logger.debug("ThreadPoolExecutor をシャットダウンします")
+        _executor.shutdown(wait=False)
+        _executor = None
+
+
+def cleanup():
+    """外部から明示的にクリーンアップを呼び出す公開関数。
+
+    Streamlit セッション終了時など、プロセス終了を待たずにリソースを
+    解放したい場合に使用する。atexit による自動クリーンアップもあるため、
+    通常は呼び出し不要。
+
+    Examples:
+        >>> from core.async_helpers import cleanup
+        >>> cleanup()  # スレッドプールを即座にシャットダウン
+    """
+    _cleanup_executor()
 
 
 def _run_in_new_loop(coro):
@@ -86,5 +132,5 @@ def run_async(coro) -> T:
         return asyncio.run(coro)
 
     # 既にイベントループが走っている → サブスレッドで実行
-    future = _executor.submit(_run_in_new_loop, coro)
+    future = _get_executor().submit(_run_in_new_loop, coro)
     return future.result()

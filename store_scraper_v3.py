@@ -17,6 +17,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
@@ -30,6 +31,10 @@ from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+from core.postal_prefecture import POSTAL_PREFIX_MAP, extract_prefecture_from_postal
+
+logger = logging.getLogger(__name__)
 
 # 環境変数読み込み（override=True で .env.local を優先）
 load_dotenv(Path.home() / ".env.local", override=True)
@@ -92,103 +97,8 @@ PREFECTURES = [
 ]
 
 
-# 郵便番号上位3桁 → 都道府県マッピング
-POSTAL_PREF_MAP = {
-    # 北海道 (001-099)
-    **{f"{i:03d}": "北海道" for i in range(1, 100)},
-    # 青森県 (030-039)
-    **{f"{i:03d}": "青森県" for i in range(30, 40)},
-    # 岩手県 (020-029)
-    **{f"{i:03d}": "岩手県" for i in range(20, 30)},
-    # 宮城県 (980-989)
-    **{f"{i:03d}": "宮城県" for i in range(980, 990)},
-    # 秋田県 (010-019)
-    **{f"{i:03d}": "秋田県" for i in range(10, 20)},
-    # 山形県 (990-999)
-    **{f"{i:03d}": "山形県" for i in range(990, 1000)},
-    # 福島県 (960-979)
-    **{f"{i:03d}": "福島県" for i in range(960, 980)},
-    # 茨城県 (300-319)
-    **{f"{i:03d}": "茨城県" for i in range(300, 320)},
-    # 栃木県 (320-329)
-    **{f"{i:03d}": "栃木県" for i in range(320, 330)},
-    # 群馬県 (370-379)
-    **{f"{i:03d}": "群馬県" for i in range(370, 380)},
-    # 埼玉県 (330-369)
-    **{f"{i:03d}": "埼玉県" for i in range(330, 370)},
-    # 千葉県 (260-299)
-    **{f"{i:03d}": "千葉県" for i in range(260, 300)},
-    # 東京都 (100-209)
-    **{f"{i:03d}": "東京都" for i in range(100, 210)},
-    # 神奈川県 (210-259)
-    **{f"{i:03d}": "神奈川県" for i in range(210, 260)},
-    # 新潟県 (940-959)
-    **{f"{i:03d}": "新潟県" for i in range(940, 960)},
-    # 富山県 (930-939)
-    **{f"{i:03d}": "富山県" for i in range(930, 940)},
-    # 石川県 (920-929)
-    **{f"{i:03d}": "石川県" for i in range(920, 930)},
-    # 福井県 (910-919)
-    **{f"{i:03d}": "福井県" for i in range(910, 920)},
-    # 山梨県 (400-409)
-    **{f"{i:03d}": "山梨県" for i in range(400, 410)},
-    # 長野県 (380-399)
-    **{f"{i:03d}": "長野県" for i in range(380, 400)},
-    # 岐阜県 (500-509)
-    **{f"{i:03d}": "岐阜県" for i in range(500, 510)},
-    # 静岡県 (410-439)
-    **{f"{i:03d}": "静岡県" for i in range(410, 440)},
-    # 愛知県 (440-499)
-    **{f"{i:03d}": "愛知県" for i in range(440, 500)},
-    # 三重県 (510-519)
-    **{f"{i:03d}": "三重県" for i in range(510, 520)},
-    # 滋賀県 (520-529)
-    **{f"{i:03d}": "滋賀県" for i in range(520, 530)},
-    # 京都府 (600-629)
-    **{f"{i:03d}": "京都府" for i in range(600, 630)},
-    # 大阪府 (530-599)
-    **{f"{i:03d}": "大阪府" for i in range(530, 600)},
-    # 兵庫県 (650-679)
-    **{f"{i:03d}": "兵庫県" for i in range(650, 680)},
-    # 奈良県 (630-639)
-    **{f"{i:03d}": "奈良県" for i in range(630, 640)},
-    # 和歌山県 (640-649)
-    **{f"{i:03d}": "和歌山県" for i in range(640, 650)},
-    # 鳥取県 (680-689)
-    **{f"{i:03d}": "鳥取県" for i in range(680, 690)},
-    # 島根県 (690-699)
-    **{f"{i:03d}": "島根県" for i in range(690, 700)},
-    # 岡山県 (700-719)
-    **{f"{i:03d}": "岡山県" for i in range(700, 720)},
-    # 広島県 (720-739)
-    **{f"{i:03d}": "広島県" for i in range(720, 740)},
-    # 山口県 (740-759)
-    **{f"{i:03d}": "山口県" for i in range(740, 760)},
-    # 徳島県 (770-779)
-    **{f"{i:03d}": "徳島県" for i in range(770, 780)},
-    # 香川県 (760-769)
-    **{f"{i:03d}": "香川県" for i in range(760, 770)},
-    # 愛媛県 (790-799)
-    **{f"{i:03d}": "愛媛県" for i in range(790, 800)},
-    # 高知県 (780-789)
-    **{f"{i:03d}": "高知県" for i in range(780, 790)},
-    # 福岡県 (800-839)
-    **{f"{i:03d}": "福岡県" for i in range(800, 840)},
-    # 佐賀県 (840-849)
-    **{f"{i:03d}": "佐賀県" for i in range(840, 850)},
-    # 長崎県 (850-859)
-    **{f"{i:03d}": "長崎県" for i in range(850, 860)},
-    # 熊本県 (860-869)
-    **{f"{i:03d}": "熊本県" for i in range(860, 870)},
-    # 大分県 (870-879)
-    **{f"{i:03d}": "大分県" for i in range(870, 880)},
-    # 宮崎県 (880-889)
-    **{f"{i:03d}": "宮崎県" for i in range(880, 890)},
-    # 鹿児島県 (890-899)
-    **{f"{i:03d}": "鹿児島県" for i in range(890, 900)},
-    # 沖縄県 (900-909)
-    **{f"{i:03d}": "沖縄県" for i in range(900, 910)},
-}
+# 郵便番号上位3桁 → 都道府県マッピング（core.postal_prefecture から参照）
+POSTAL_PREF_MAP = POSTAL_PREFIX_MAP
 
 
 def extract_full_address(text: str) -> str:
@@ -268,11 +178,11 @@ def extract_prefecture(text: str) -> str:
             return PREFECTURES[i]
 
     # 方法3: 郵便番号から推測（core.postal_prefecture モジュール使用）
-    postal_match = re.search(r"〒?(\d{3})-?(\d{4})", text)
+    postal_match = re.search(r"〒?\d{3}-?\d{4}", text)
     if postal_match:
-        prefix = postal_match.group(1)
-        if prefix in POSTAL_PREF_MAP:
-            return POSTAL_PREF_MAP[prefix]
+        pref = extract_prefecture_from_postal(postal_match.group())
+        if pref:
+            return pref
 
     return ""
 
@@ -348,7 +258,7 @@ class LLMClient:
             )
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]
-        except Exception as e:
+        except (requests.RequestException, KeyError, json.JSONDecodeError) as e:
             raise RuntimeError(f"Perplexity API error: {e}")
 
     def _call_gemini(self, prompt: str, model: str, temperature: float) -> str:
@@ -361,8 +271,10 @@ class LLMClient:
                 generation_config={"temperature": temperature}
             )
             return response.text
-        except Exception as e:
+        except (ImportError, ValueError, AttributeError) as e:
             raise RuntimeError(f"Gemini API error: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Gemini API unexpected error: {e}")
 
 
 # ====================================
@@ -518,7 +430,8 @@ class StaticHTMLStrategy(ScrapingStrategy):
                                 if extracted:
                                     log(f"  → {len(extracted)}件抽出")
                                     stores.extend(extracted)
-                            except Exception:
+                            except (requests.RequestException, ValueError, RuntimeError) as e:
+                                logger.warning("都道府県ページ巡回エラー: %s - %s", pref_url, e)
                                 continue
                     else:
                         # LLMで店舗情報を抽出
@@ -530,7 +443,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
                             log(f"→ {len(extracted)}件抽出")
                             stores.extend(extracted)
 
-                except Exception as e:
+                except (requests.RequestException, ValueError, RuntimeError) as e:
                     log(f"ページエラー: {e}")
                     continue
 
@@ -552,7 +465,8 @@ class StaticHTMLStrategy(ScrapingStrategy):
                         if extracted:
                             log(f"  → {len(extracted)}件抽出")
                             stores.extend(extracted)
-                    except Exception:
+                    except (requests.RequestException, ValueError, RuntimeError) as e:
+                        logger.warning("追加都道府県巡回エラー: %s - %s", pref_url, e)
                         continue
 
             # 重複除去
@@ -560,6 +474,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
             log(f"完了: 合計{len(stores)}件（重複除去後）")
 
         except Exception as e:
+            logger.error("静的HTML解析で予期しないエラー: %s", e, exc_info=True)
             log(f"エラー: {e}")
 
         return stores
@@ -750,7 +665,8 @@ class StaticHTMLStrategy(ScrapingStrategy):
 
         except json.JSONDecodeError:
             return []
-        except Exception:
+        except (RuntimeError, KeyError, TypeError) as e:
+            logger.warning("LLM店舗情報抽出エラー: %s", e)
             return []
 
     def _extract_stores_by_pattern(
@@ -1113,7 +1029,8 @@ class BrowserAutomationStrategy(ScrapingStrategy):
                                     if extracted:
                                         stores.extend(extracted)
                                         log(f"  → {len(extracted)}件抽出")
-                                except Exception:
+                                except (TimeoutError, ValueError, RuntimeError, TypeError, AttributeError) as e:
+                                    logger.warning("ブラウザ都道府県巡回エラー: %s - %s", pref_link, e)
                                     continue
                         else:
                             # 直接抽出
@@ -1123,7 +1040,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
                                 stores.extend(extracted)
                                 log(f"→ {len(extracted)}件抽出")
 
-                    except Exception as e:
+                    except (TimeoutError, ValueError, RuntimeError, TypeError, AttributeError) as e:
                         log(f"ページエラー: {e}")
                         continue
 
@@ -1285,7 +1202,8 @@ class AIInferenceStrategy(ScrapingStrategy):
                     try:
                         pref_stores = await self._scrape_page(pref_url, company_name, llm)
                         stores.extend(pref_stores)
-                    except Exception:
+                    except (requests.RequestException, ValueError, RuntimeError) as e:
+                        logger.warning("AI推論 都道府県ページエラー: %s - %s", pref_url, e)
                         continue
 
             # Step 2: 外部検索で補完（店舗数が少ない場合）
@@ -1299,6 +1217,7 @@ class AIInferenceStrategy(ScrapingStrategy):
             log(f"完了: 合計{len(stores)}件")
 
         except Exception as e:
+            logger.error("AI推論で予期しないエラー: %s", e, exc_info=True)
             log(f"エラー: {e}")
 
         return stores
@@ -1354,8 +1273,8 @@ class AIInferenceStrategy(ScrapingStrategy):
             json_match = re.search(r'\{[\s\S]*\}', text)
             if json_match:
                 return json.loads(json_match.group())
-        except Exception:
-            pass
+        except (json.JSONDecodeError, RuntimeError, KeyError, TypeError) as e:
+            logger.warning("サイト構造分析エラー: %s", e)
 
         return {"api_endpoint": None, "prefecture_urls": [], "recommended_approach": "crawl"}
 
@@ -1403,8 +1322,8 @@ class AIInferenceStrategy(ScrapingStrategy):
                     for item in items
                     if item.get("store_name")
                 ]
-        except Exception:
-            pass
+        except (requests.RequestException, json.JSONDecodeError, RuntimeError, KeyError, TypeError) as e:
+            logger.warning("API店舗情報取得エラー: %s - %s", api_url, e)
 
         return []
 
@@ -1468,8 +1387,8 @@ class AIInferenceStrategy(ScrapingStrategy):
                     for item in items
                     if item.get("store_name")
                 ]
-        except Exception:
-            pass
+        except (json.JSONDecodeError, RuntimeError, KeyError, TypeError) as e:
+            logger.warning("外部検索による店舗情報取得エラー: %s", e)
 
         return []
 
@@ -1578,6 +1497,7 @@ class MultiStrategyScraper:
 
             except Exception as e:
                 error_msg = f"戦略 '{strategy.name}' エラー: {str(e)}"
+                logger.error("戦略 '%s' で予期しないエラー: %s", strategy.name, e, exc_info=True)
                 errors.append(error_msg)
                 log(f"❌ {error_msg}")
                 continue
