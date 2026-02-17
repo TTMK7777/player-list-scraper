@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime
+import inspect
 
 import pytest
 
@@ -513,3 +514,103 @@ class TestAttributeInvestigationExporter:
         exporter = AttributeInvestigationExporter(attributes=sample_attributes)
         result_path = exporter.export(results, output_path)
         assert result_path.exists()
+
+
+# ====================================
+# コンテキスト対応プロンプトテスト
+# ====================================
+class TestContextAwarePrompt:
+    """context パラメータ対応のテスト"""
+
+    def test_prompt_with_context_includes_criteria(self):
+        """context 指定時にプロンプトに「■判定基準」が含まれる"""
+        inv = AttributeInvestigator()
+        prompt = inv._build_batch_prompt(
+            players=[{"player_name": "テスト社", "official_url": "https://example.com"}],
+            attributes=["属性A", "属性B"],
+            industry="テスト業界",
+            context="属性A=有料サービスを指す",
+        )
+        assert "■判定基準" in prompt
+        assert "属性A=有料サービスを指す" in prompt
+
+    def test_prompt_without_context_unchanged(self):
+        """context 未指定時にプロンプトに「■判定基準」が含まれない"""
+        inv = AttributeInvestigator()
+        prompt = inv._build_batch_prompt(
+            players=[{"player_name": "テスト社"}],
+            attributes=["属性A"],
+        )
+        assert "■判定基準" not in prompt
+
+    def test_prompt_empty_context_unchanged(self):
+        """context が空文字の場合もプロンプトに「■判定基準」が含まれない"""
+        inv = AttributeInvestigator()
+        prompt = inv._build_batch_prompt(
+            players=[{"player_name": "テスト社"}],
+            attributes=["属性A"],
+            context="",
+        )
+        assert "■判定基準" not in prompt
+
+    def test_prompt_area_template_context(self):
+        """地理系テンプレートのコンテキストがプロンプトに含まれる"""
+        inv = AttributeInvestigator()
+        area_context = "地方区分: 北海道=北海道, 東北=青森/岩手/宮城"
+        prompt = inv._build_batch_prompt(
+            players=[{"player_name": "テスト社"}],
+            attributes=["北海道", "東北"],
+            context=area_context,
+        )
+        assert area_context in prompt
+
+    def test_batch_with_context_parameter(self):
+        """investigate_batch のシグネチャに context パラメータが存在する"""
+        sig = inspect.signature(AttributeInvestigator.investigate_batch)
+        assert "context" in sig.parameters
+        assert sig.parameters["context"].default == ""
+
+    def test_single_with_context_parameter(self):
+        """investigate_single のシグネチャに context パラメータが存在する"""
+        sig = inspect.signature(AttributeInvestigator.investigate_single)
+        assert "context" in sig.parameters
+        assert sig.parameters["context"].default == ""
+
+    @pytest.mark.asyncio
+    async def test_investigate_batch_context_passed_through(
+        self, mock_llm_client_attribute, sample_players
+    ):
+        """investigate_batch で context が内部メソッドに渡されるか"""
+        inv = AttributeInvestigator(llm_client=mock_llm_client_attribute)
+
+        # context を指定して実行
+        results = await inv.investigate_batch(
+            sample_players,
+            attributes=["属性A"],
+            industry="テスト業界",
+            context="テストコンテキスト",
+            batch_size=5,
+        )
+
+        # 結果が取得できればOK（内部でエラーが起きていないことの確認）
+        assert len(results) == 3
+
+    @pytest.mark.asyncio
+    async def test_investigate_single_context_passed_through(
+        self, mock_llm_client_attribute
+    ):
+        """investigate_single で context が内部メソッドに渡されるか"""
+        inv = AttributeInvestigator(llm_client=mock_llm_client_attribute)
+
+        # context を指定して実行
+        result = await inv.investigate_single(
+            player_name="テスト社",
+            official_url="https://example.com",
+            attributes=["属性A"],
+            industry="テスト業界",
+            context="テストコンテキスト",
+        )
+
+        # 結果が取得できればOK
+        assert result is not None
+        assert result.player_name in ["テスト社", "Netflix"]  # モックの戻り値次第

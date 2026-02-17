@@ -29,7 +29,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.llm_client import get_available_providers
-from ui.attribute_tab import render_attribute_tab
+from ui.attribute_tab import render_investigation_tab
 from ui.newcomer_tab import render_newcomer_tab
 from ui.store_tab import render_store_tab
 from ui.validation_tab import render_validation_tab
@@ -145,7 +145,7 @@ def init_apis() -> dict[str, bool]:
 # ====================================
 def main():
     st.title("🔍 プレイヤーリスト調査システム v6.1")
-    st.caption("正誤チェック + 店舗調査 + 属性調査 + 新規参入検出 + 3段階チェック | AI調査（推奨）")
+    st.caption("正誤チェック + 汎用調査 + 店舗調査 + 新規参入検出 + 3段階チェック | AI調査（推奨）")
 
     # ====================================
     # サイドバー
@@ -214,8 +214,8 @@ def main():
         **店舗調査**
         1. 調査モード選択 → 企業入力 → 「店舗調査開始」
 
-        **属性調査**
-        1. プリセット選択 → Excel入力 → 「属性調査開始」
+        **汎用調査**
+        1. テンプレート選択 → Excel入力 → 「調査開始」
 
         **新規参入検出**
         1. 既存リスト入力 → 「新規参入を検索」
@@ -233,8 +233,8 @@ def main():
         "機能タイプ",
         [
             "🔍 正誤チェック",
-            "🏪 店舗調査",
-            "📊 属性調査",
+            "📊 汎用調査",
+            "🏪 店舗調査（従来版）",
             "🆕 新規参入検出",
             "📋 3段階チェック",
         ],
@@ -247,8 +247,8 @@ def main():
     # ====================================
     # 機能分岐（各タブモジュールに委譲）
     # ====================================
-    if "属性調査" in function_type:
-        render_attribute_tab(provider=provider, industry=industry)
+    if "汎用調査" in function_type:
+        render_investigation_tab(provider=provider, industry=industry)
     elif "新規参入検出" in function_type:
         render_newcomer_tab(provider=provider, industry=industry)
     elif "3段階チェック" in function_type:

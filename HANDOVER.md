@@ -1,8 +1,35 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-02-10
+> **最終更新**: 2026-02-17
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.1
+> **バージョン**: v6.2
+
+## セッション: 2026-02-17
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v6.2 汎用調査エンジン — テンプレート管理 + context対応 + UI統合 |
+| **変更ファイル** | 10 modified + 6 new (core/investigation_templates.py, templates/builtin/*.json, tests/test_investigation_templates.py) |
+| **テスト** | 367件全パス（v6.1の325件 + 新規42件、回帰なし） |
+| **ステータス** | 完了 |
+
+### 変更詳細
+- 調査テンプレートデータモデル新規作成（InvestigationTemplate + TemplateManager）
+- 組み込みテンプレート4種（動画配信ジャンル、クレカブランド、8地方区分、47都道府県）
+- attribute_investigator.py に context パラメータ追加（LLMプロンプトに判定基準注入）
+- ui/attribute_tab.py を汎用調査タブに大幅リファクタ（テンプレート選択・管理UI）
+- app_v5.py タブ名称変更、workflow_tab.py ラベル更新
+- /審査官 レビュー → 🟡 CONDITIONAL（3件対応済み）
+- /技術参謀 レビュー → 🟢 APPROVE（F=0, I=0, R=3, E=3）
+
+### 次回やること / 残課題
+- [R] `import_from_excel()` の Workbook を try/finally でクローズ
+- [R] `render_investigation_tab()` の関数分割（425行 → 4関数）
+- [R] 一時ファイル作成ヘルパーの共通化
+- [E] テンプレートIDのASCIIスラッグ化（CI/CD環境対応）
+- [E] contextフィールドのサニタイズ強化
+- [E] カテゴリ値対応（boolean以外の多値分類）
 
 ---
 
@@ -24,22 +51,24 @@
    - Perplexity/Gemini APIによる最新情報取得
    - アラートレベル別レポート出力
 
-2. **店舗・教室の都道府県別調査** (v3.0)
+2. **汎用調査（テンプレート方式）** (v6.2 NEW)
+   - 調査テンプレート管理（作成・保存・再利用・インポート/エクスポート）
+   - 組み込みテンプレート: 動画配信ジャンル、クレカブランド、8地方区分、47都道府県
+   - 判定基準（context）をLLMプロンプトに注入可能
+   - バッチプロンプト方式でコスト最適化
+   - カスタム入力（保存なし）にも対応
+
+3. **店舗・教室の都道府県別調査（従来版）** (v3.0)
    - マルチ戦略スクレイピング + AI調査
    - 静的HTML → ブラウザ自動化 → AI推論
+   - ※ v6.2で汎用調査に地理系テンプレートを追加。スクレイピング機能はこのタブで引き続き利用可能
 
-3. **属性調査（カテゴリ/ブランド）** (v6.0 NEW)
-   - 動画配信ジャンル別配信有無
-   - クレカ取り扱いブランド判定
-   - バッチプロンプト方式でコスト最適化
-   - プリセット + カスタム属性対応
-
-4. **新規参入プレイヤー自動検出** (v6.0 NEW)
+4. **新規参入プレイヤー自動検出** (v6.0)
    - LLM提案 → URL自動検証 → 手動確認の3ステップ
    - ハルシネーション対策（URL検証 + 信頼度スコアリング）
    - 自動追加なし（候補提示のみ）
 
-5. **3段階チェック体制** (v6.0 NEW)
+5. **3段階チェック体制** (v6.0)
    - 実査前 → 確定時 → 発表前のワークフロー管理
    - フェーズ間差分レポート
    - チェック履歴の保存・閲覧
@@ -56,38 +85,44 @@
 │
 ├── core/                  # コアモジュール
 │   ├── __init__.py
-│   ├── async_helpers.py   # 非同期ヘルパー・動的並列化 (v6.0.1 NEW)
+│   ├── async_helpers.py   # 非同期ヘルパー・動的並列化 (v6.0.1)
 │   ├── excel_handler.py   # Excel読み書き + AttributeInvestigationExporter
 │   ├── llm_client.py      # LLMクライアント（Perplexity/Gemini）
-│   ├── llm_cache.py       # LLMレスポンスキャッシュ (TTL付き) (v6.1 NEW)
-│   ├── sanitizer.py       # 入力サニタイザー共通化 (v6.0 NEW)
-│   ├── safe_parse.py      # 安全な型変換 (v6.0.1 NEW)
-│   ├── attribute_presets.py # 属性プリセット定義 (v6.0 NEW)
-│   ├── postal_prefecture.py # 郵便番号→都道府県変換 (v6.1 NEW)
-│   ├── check_history.py   # チェック履歴管理 + 差分計算 (v6.0 NEW)
-│   └── check_workflow.py  # 3段階ワークフロー管理 (v6.0 NEW)
+│   ├── llm_cache.py       # LLMレスポンスキャッシュ (TTL付き) (v6.1)
+│   ├── sanitizer.py       # 入力サニタイザー共通化 (v6.0)
+│   ├── safe_parse.py      # 安全な型変換 (v6.0.1)
+│   ├── attribute_presets.py # 属性プリセット定義 (v6.0)
+│   ├── investigation_templates.py # 調査テンプレート管理 (v6.2 NEW)
+│   ├── postal_prefecture.py # 郵便番号→都道府県変換 (v6.1)
+│   ├── check_history.py   # チェック履歴管理 + 差分計算 (v6.0)
+│   └── check_workflow.py  # 3段階ワークフロー管理 (v6.0)
 │
 ├── investigators/         # 調査モジュール
 │   ├── __init__.py
 │   ├── base.py            # データ型定義（AlertLevel, AttributeInvestigationResult等）
 │   ├── player_validator.py # 正誤チェッカー
 │   ├── store_investigator.py # 店舗調査
-│   ├── attribute_investigator.py # 属性調査エンジン (v6.0 NEW)
+│   ├── attribute_investigator.py # 汎用調査エンジン (v6.0, v6.2 context対応)
 │   └── newcomer_detector.py  # 新規参入検出 (v6.0 NEW)
 │
 ├── ui/                    # UIモジュール (v6.0 NEW)
 │   ├── __init__.py
 │   ├── common.py          # 共通UIコンポーネント
 │   ├── validation_tab.py  # 正誤チェックタブ (v6.1 NEW)
-│   ├── store_tab.py       # 店舗調査タブ (v6.1 NEW)
-│   ├── attribute_tab.py   # 属性調査タブ
+│   ├── store_tab.py       # 店舗調査タブ（従来版） (v6.1)
+│   ├── attribute_tab.py   # 汎用調査タブ (v6.2 リファクタ)
 │   ├── newcomer_tab.py    # 新規参入検出タブ
 │   └── workflow_tab.py    # 3段階チェックタブ
 │
-├── tests/                 # テスト (325件)
+├── templates/             # 調査テンプレート (v6.2 NEW)
+│   ├── builtin/           # 組み込みテンプレート (git管理)
+│   └── user/              # ユーザー作成 (gitignore)
+│
+├── tests/                 # テスト (367件)
 │   ├── conftest.py
+│   ├── test_investigation_templates.py # テンプレートテスト (v6.2 NEW)
 │   ├── test_async_helpers.py    # 非同期ヘルパーテスト
-│   ├── test_attribute_investigator.py # 属性調査テスト
+│   ├── test_attribute_investigator.py # 汎用調査テスト
 │   ├── test_check_history.py    # 履歴管理テスト
 │   ├── test_check_workflow.py   # ワークフローテスト
 │   ├── test_excel_handler.py    # Excel処理テスト
@@ -164,14 +199,23 @@ streamlit run app_v5.py
 | ✅ 正常 | 変更なし | アクション不要 |
 | ⚠️ 要確認 | 判断不能 | 手動確認必要 |
 
-### 5.2 属性調査（v6.0 NEW）
+### 5.2 汎用調査（v6.2 リファクタ）
 
-#### プリセット
-| プリセット | 属性数 | 推奨バッチ | 推定コスト |
-|-----------|--------|-----------|-----------|
-| 動画配信_ジャンル | 15属性 | 5社/回 | ~$0.24（36件） |
-| クレカ_ブランド | 7属性 | 10社/回 | ~$1.62（539件） |
-| カスタム | ユーザー定義 | 自動決定 | 件数次第 |
+#### 調査テンプレート
+| テンプレート | カテゴリ | 属性数 | 推奨バッチ | 推定コスト |
+|-------------|---------|--------|-----------|-----------|
+| 動画配信_ジャンル | 属性系 | 15属性 | 5社/回 | ~$0.24（36件） |
+| クレカ_ブランド | 属性系 | 7属性 | 10社/回 | ~$1.62（539件） |
+| 地方区分_8地方 | 地理系 | 8属性 | 10社/回 | コスト同等 |
+| 都道府県_47 | 地理系 | 47属性 | 3社/回 | 件数次第 |
+| カスタム | - | ユーザー定義 | 自動決定 | 件数次第 |
+
+#### テンプレート管理
+- **作成**: テンプレート名、カテゴリ、属性リスト、判定基準（context）を定義
+- **保存**: `templates/user/` にJSON永続化（再利用可能）
+- **インポート**: テキスト（カンマ/改行区切り）またはExcel（第1列）から属性を取り込み
+- **エクスポート**: テンプレートをJSON形式で書き出し
+- **判定基準（context）**: LLMに具体的な判定ガイダンスを渡す（例: 「有償=年会費が発生するもの」）
 
 #### 出力形式
 - **マトリクス表示**: ○/×/? のテーブル
@@ -206,6 +250,31 @@ streamlit run app_v5.py
 ---
 
 ## 6. 変更履歴
+
+### v6.2 (2026-02-17) - 汎用調査エンジン
+
+#### 調査テンプレート管理
+- `core/investigation_templates.py` - InvestigationTemplate + TemplateManager 新規作成
+- テンプレートの作成・保存・削除・インポート/エクスポート
+- JSON永続化（`templates/builtin/` git管理 + `templates/user/` gitignore）
+- 組み込みテンプレート4種: 動画配信ジャンル、クレカブランド、8地方区分、47都道府県
+
+#### プロンプトエンジン強化
+- `investigators/attribute_investigator.py` に `context` パラメータ追加
+- 判定基準（context）をLLMプロンプトに「■判定基準」セクションとして注入
+- `investigate_batch()`, `investigate_single()`, `_build_batch_prompt()` 全メソッド対応
+
+#### UI統合
+- `ui/attribute_tab.py` → `render_investigation_tab()` にリネーム（後方互換ラッパー維持）
+- テンプレート選択・管理UI追加（カテゴリ別グループ化、作成/削除/インポート）
+- 「カスタム（保存なしで調査）」オプション維持
+- バッチサイズ上書きオプション追加
+- `app_v5.py`: 「📊 属性調査」→「📊 汎用調査」、「🏪 店舗調査」→「🏪 店舗調査（従来版）」
+- `ui/workflow_tab.py`: 表示ラベル更新
+
+#### テスト
+- `test_investigation_templates.py` (34件) + context テスト (8件) 新規追加
+- 合計: 367件（v6.1の325件 → 367件）
 
 ### v6.1 (2026-02-10) - UI分離・品質改善
 
@@ -284,8 +353,11 @@ streamlit run app_v5.py
 ### 7.1 改善候補
 - [x] バッチ処理の並列化強化（v6.1: 動的並列化 optimal_concurrency 実装済み）
 - [x] キャッシュ機能（v6.1: LLMCache 実装済み、TTL付きインメモリキャッシュ）
+- [x] 汎用調査エンジン（v6.2: テンプレート管理 + context対応 実装済み）
 - [ ] Slack/Teams通知連携
-- [x] UIの既存タブ（正誤チェック、店舗調査）も `ui/` モジュールに分離（v6.1: 実装済み）
+- [ ] カテゴリ値対応（boolean以外の多値分類、例: プレミアム/スタンダード/なし）
+- [ ] テンプレートIDのASCIIスラッグ化（CI/CD環境対応）
+- [ ] contextフィールドのサニタイズ強化
 
 ### 7.2 注意事項
 - Perplexity APIは従量課金（1件約$0.01-0.05）

@@ -85,7 +85,7 @@ def render_workflow_tab(provider: str, industry: str):
         st.markdown(f"**{config['label']}**: {config['description']}")
         st.markdown(f"- 正誤チェック: `{config['validation_scope']}`")
         st.markdown(f"- 新規参入検出: `{'あり' if config['newcomer_detection'] else 'なし'}`")
-        st.markdown(f"- 属性調査: `{config['attribute_scope']}`")
+        st.markdown(f"- 汎用調査: `{config['attribute_scope']}`")
 
         diff_base = config.get("diff_base_phase")
         if diff_base:

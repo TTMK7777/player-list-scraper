@@ -1,4 +1,4 @@
-# プレイヤーリスト調査システム v6.1
+# プレイヤーリスト調査システム v6.2
 
 オリコン業務向けの**プレイヤーリスト調査・正誤チェック自動化ツール**。
 
@@ -9,15 +9,17 @@
 - Perplexity/Gemini APIで**最新情報を取得**
 - アラートレベル別レポート出力（Excel/CSV）
 
-### 2. 店舗・教室の都道府県別調査
+### 2. 汎用調査（テンプレート方式）
+- **調査テンプレート管理**: 作成・保存・再利用・インポート/エクスポート
+- 組み込みテンプレート: 動画配信ジャンル、クレカブランド、8地方区分、47都道府県
+- **判定基準（context）**: LLMに具体的な判定ガイダンスを注入可能
+- バッチプロンプト方式でコスト最適化
+- カスタム入力（保存なし）にも対応
+
+### 3. 店舗・教室の都道府県別調査（従来版）
 - AI調査（推奨）: LLMによるWeb検索ベースの調査
 - スクレイピング: サイト直接クローリング（3段階戦略）
 - ハイブリッド: AI調査 + スクレイピング補完
-
-### 3. 属性調査（カテゴリ/ブランド）
-- プレイヤー × 属性のマトリクス自動生成
-- バッチプロンプト方式でコスト最適化
-- プリセット対応（クレカブランド、動画配信ジャンル等）
 
 ### 4. 新規参入検出
 - 既存リストに含まれない新規参入企業を自動検索
@@ -86,7 +88,8 @@ start.bat
 │   ├── llm_cache.py             # LLMレスポンスキャッシュ (TTL付き)
 │   ├── sanitizer.py             # 入力サニタイザー
 │   ├── safe_parse.py            # 安全な型変換
-│   ├── attribute_presets.py     # 属性調査プリセット
+│   ├── attribute_presets.py     # 属性調査プリセット (後方互換)
+│   ├── investigation_templates.py # 調査テンプレート管理 (v6.2)
 │   ├── postal_prefecture.py     # 郵便番号→都道府県変換
 │   ├── check_history.py         # チェック履歴管理 + 差分計算
 │   └── check_workflow.py        # 3段階ワークフロー管理
@@ -95,22 +98,27 @@ start.bat
 │   ├── base.py                  # データ型定義
 │   ├── player_validator.py      # 正誤チェッカー
 │   ├── store_investigator.py    # 店舗調査エンジン
-│   ├── attribute_investigator.py # 属性調査エンジン
+│   ├── attribute_investigator.py # 汎用調査エンジン (v6.2 context対応)
 │   └── newcomer_detector.py     # 新規参入検出
 │
 ├── ui/                          # UIモジュール
 │   ├── common.py                # 共通コンポーネント
 │   ├── validation_tab.py        # 正誤チェックタブ
-│   ├── store_tab.py             # 店舗調査タブ
-│   ├── attribute_tab.py         # 属性調査タブ
+│   ├── store_tab.py             # 店舗調査タブ（従来版）
+│   ├── attribute_tab.py         # 汎用調査タブ (v6.2 リファクタ)
 │   ├── newcomer_tab.py          # 新規参入検出タブ
 │   └── workflow_tab.py          # 3段階チェックタブ
 │
+├── templates/                   # 調査テンプレート (v6.2)
+│   ├── builtin/                 # 組み込みテンプレート (git管理)
+│   └── user/                    # ユーザー作成 (gitignore)
+│
 ├── store_scraper_v3.py          # 店舗スクレイピングエンジン
 │
-├── tests/                       # テストスイート (pytest, 325件)
+├── tests/                       # テストスイート (pytest, 367件)
 │   ├── conftest.py              # 共通フィクスチャ
 │   ├── test_async_helpers.py
+│   ├── test_investigation_templates.py
 │   ├── test_attribute_investigator.py
 │   ├── test_check_history.py
 │   ├── test_check_workflow.py
@@ -159,7 +167,8 @@ pytest tests/ --cov=. --cov-report=html
 
 | Ver | 日付 | 変更内容 |
 |-----|------|---------|
-| **v6.1** | 2026-02-10 | UI分離(validation_tab/store_tab)、LLMキャッシュ、動的並列化、住所精度改善、テスト310件 |
+| **v6.2** | 2026-02-17 | 汎用調査エンジン（テンプレート管理、context対応、UI統合、地理系テンプレート追加）、テスト367件 |
+| **v6.1** | 2026-02-10 | UI分離(validation_tab/store_tab)、LLMキャッシュ、動的並列化、住所精度改善、テスト325件 |
 | **v6.0.1** | 2026-02-09 | 18件バグ修正、safe_parse/async_helpers追加、テスト213件 |
 | **v6.0** | 2026-02-09 | 4機能追加（属性調査、新規参入検出、3段階チェック、UIモジュール化） |
 | **v5.1** | 2026-02-07 | 店舗調査精度向上、属性調査バッチ化 |

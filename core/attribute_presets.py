@@ -71,3 +71,28 @@ def get_preset(name: str) -> dict:
 def get_preset_labels() -> dict[str, str]:
     """プリセット名 → 表示ラベルの辞書を取得"""
     return {name: preset["label"] for name, preset in ATTRIBUTE_PRESETS.items()}
+
+
+def get_builtin_templates():
+    """既存プリセットを InvestigationTemplate 形式で返す（後方互換ブリッジ）。
+
+    Returns:
+        list[InvestigationTemplate]: プリセットから変換されたテンプレートのリスト。
+    """
+    from core.investigation_templates import InvestigationTemplate
+
+    templates = []
+    for name, preset in ATTRIBUTE_PRESETS.items():
+        templates.append(InvestigationTemplate(
+            id=name,
+            label=preset["label"],
+            description=preset["description"],
+            category="属性系",
+            attributes=preset["attributes"],
+            context="",
+            batch_size=preset.get("batch_size"),
+            is_builtin=True,
+            created_at="2026-02-17T00:00:00",
+            updated_at="2026-02-17T00:00:00",
+        ))
+    return templates

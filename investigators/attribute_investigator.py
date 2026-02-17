@@ -124,6 +124,7 @@ class AttributeInvestigator:
         on_progress: Optional[Callable] = None,
         concurrency: int = 2,
         delay_seconds: float = 1.5,
+        context: str = "",
     ) -> list[AttributeInvestigationResult]:
         """バッチ単位で属性調査を実行
 
@@ -135,6 +136,7 @@ class AttributeInvestigator:
             on_progress: 進捗コールバック(current, total, name)
             concurrency: 同時実行数
             delay_seconds: バッチ間遅延（秒）
+            context: 判定基準の補足コンテキスト（空文字の場合は省略）
 
         Returns:
             AttributeInvestigationResult のリスト
@@ -157,7 +159,7 @@ class AttributeInvestigator:
             async with semaphore:
                 try:
                     batch_results = await self._investigate_single_batch(
-                        batch, attributes, industry
+                        batch, attributes, industry, context=context
                     )
                     results.extend(batch_results)
                 except Exception as e:
@@ -189,13 +191,24 @@ class AttributeInvestigator:
         players: list[dict],
         attributes: list[str],
         industry: str = "",
+        context: str = "",
     ) -> list[AttributeInvestigationResult]:
-        """1バッチ分の属性調査を実行（複数社まとめて1回のLLM呼び出し）"""
+        """1バッチ分の属性調査を実行（複数社まとめて1回のLLM呼び出し）
+
+        Args:
+            players: バッチ内のプレイヤーリスト
+            attributes: 調査対象属性リスト
+            industry: 業界名
+            context: 判定基準の補足コンテキスト（空文字の場合は省略）
+
+        Returns:
+            AttributeInvestigationResult のリスト
+        """
 
         llm = self._get_llm_client()
 
         # プロンプト生成
-        prompt = self._build_batch_prompt(players, attributes, industry)
+        prompt = self._build_batch_prompt(players, attributes, industry, context=context)
 
         # LLM呼び出し（同期→非同期ラッパー）
         loop = asyncio.get_running_loop()
@@ -212,6 +225,7 @@ class AttributeInvestigator:
         players: list[dict],
         attributes: list[str],
         industry: str = "",
+        context: str = "",
     ) -> str:
         """バッチプロンプトを生成
 
@@ -219,6 +233,7 @@ class AttributeInvestigator:
             players: バッチ内のプレイヤーリスト
             attributes: 調査対象属性リスト
             industry: 業界名
+            context: 判定基準の補足コンテキスト（空文字の場合は省略）
 
         Returns:
             LLM用プロンプト文字列
@@ -242,11 +257,14 @@ class AttributeInvestigator:
 
         industry_text = f"（{safe_industry}業界）" if safe_industry else ""
 
+        # コンテキストセクション（指定時のみ挿入）
+        context_section = f"\n■判定基準\n{context}\n" if context else ""
+
         prompt = f"""以下の{len(players)}つのサービス{industry_text}について、各属性の取り扱い有無を調査してください。
 
 ■調査対象
 {players_text}
-
+{context_section}
 ■調査属性: {attributes_text}
 
 【出力形式】JSON（必ずこの形式で出力してください）
@@ -369,6 +387,7 @@ class AttributeInvestigator:
         official_url: str,
         attributes: list[str],
         industry: str = "",
+        context: str = "",
     ) -> AttributeInvestigationResult:
         """個別プレイヤーの属性調査（精密調査用）
 
@@ -377,12 +396,15 @@ class AttributeInvestigator:
             official_url: 公式URL
             attributes: 調査対象属性リスト
             industry: 業界名
+            context: 判定基準の補足コンテキスト（空文字の場合は省略）
 
         Returns:
             AttributeInvestigationResult
         """
         player = {"player_name": player_name, "official_url": official_url}
-        results = await self._investigate_single_batch([player], attributes, industry)
+        results = await self._investigate_single_batch(
+            [player], attributes, industry, context=context
+        )
         return results[0] if results else AttributeInvestigationResult.create_error(
             player_name=player_name,
             error_message="調査結果なし",

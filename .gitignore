@@ -52,7 +52,9 @@ docs/*テスト用*
 
 # 業務関連ファイル
 docs/【調査推進*
+docs/調査推進*
 docs/*.xlsx
+docs/*.txt
 
 # OS
 .DS_Store
@@ -66,3 +68,6 @@ nul
 
 # Archive (legacy versions)
 archive/
+
+# ユーザー作成テンプレート
+templates/user/
