@@ -56,6 +56,12 @@ docs/調査推進*
 docs/*.xlsx
 docs/*.txt
 
+# Security - sensitive files
+credentials.json
+secrets.json
+*.pem
+*.key
+
 # OS
 .DS_Store
 Thumbs.db
