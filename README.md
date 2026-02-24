@@ -1,4 +1,4 @@
-# プレイヤーリスト調査システム v6.2
+# プレイヤーリスト調査システム v6.3
 
 オリコン業務向けの**プレイヤーリスト調査・正誤チェック自動化ツール**。
 
@@ -6,7 +6,7 @@
 
 ### 1. プレイヤー正誤チェック
 - 撤退・統合・名称変更の**自動検出**
-- Perplexity/Gemini APIで**最新情報を取得**
+- Gemini APIで**最新情報を取得**
 - アラートレベル別レポート出力（Excel/CSV）
 
 ### 2. 汎用調査（テンプレート方式）
@@ -41,7 +41,6 @@
 pip install -r requirements.txt
 
 # APIキーを設定（~/.env.local）
-echo "PERPLEXITY_API_KEY=pplx-xxxxx" >> ~/.env.local
 echo "GOOGLE_API_KEY=AIzaSy-xxxxx" >> ~/.env.local
 ```
 
@@ -84,7 +83,7 @@ start.bat
 ├── core/                        # コアモジュール
 │   ├── async_helpers.py         # 非同期ヘルパー (run_async, 動的並列化)
 │   ├── excel_handler.py         # Excel読み書き
-│   ├── llm_client.py            # LLMクライアント (Perplexity/Gemini)
+│   ├── llm_client.py            # LLMクライアント (Gemini)
 │   ├── llm_cache.py             # LLMレスポンスキャッシュ (TTL付き)
 │   ├── sanitizer.py             # 入力サニタイザー
 │   ├── safe_parse.py            # 安全な型変換
@@ -145,8 +144,7 @@ start.bat
 `~/.env.local` に設定：
 
 ```bash
-PERPLEXITY_API_KEY=pplx-xxxxx  # 正誤チェック・店舗調査に推奨
-GOOGLE_API_KEY=AIzaSy-xxxxx    # Gemini用（バックアップ）
+GOOGLE_API_KEY=AIzaSy-xxxxx    # Gemini API（Google検索グラウンディング対応）
 ```
 
 ---
@@ -167,6 +165,7 @@ pytest tests/ --cov=. --cov-report=html
 
 | Ver | 日付 | 変更内容 |
 |-----|------|---------|
+| **v6.3** | 2026-02-24 | Perplexity→Gemini一本化（Google検索グラウンディング対応） |
 | **v6.2** | 2026-02-17 | 汎用調査エンジン（テンプレート管理、context対応、UI統合、地理系テンプレート追加）、テスト367件 |
 | **v6.1** | 2026-02-10 | UI分離(validation_tab/store_tab)、LLMキャッシュ、動的並列化、住所精度改善、テスト325件 |
 | **v6.0.1** | 2026-02-09 | 18件バグ修正、safe_parse/async_helpers追加、テスト213件 |

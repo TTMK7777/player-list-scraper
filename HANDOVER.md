@@ -1,8 +1,35 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-02-17
+> **最終更新**: 2026-02-24
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.2.1
+> **バージョン**: v6.3
+
+## セッション: 2026-02-24
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v6.3 Perplexity→Gemini一本化 |
+| **変更ファイル** | 21ファイル（core, investigators×4, ui×5, store_scraper, app, tests×3, scripts, install.bat, 設定3ファイル） |
+| **テスト** | 363件全パス（Perplexityテスト削除分で367→363） |
+| **品質ゲート** | /CTO 🟢 APPROVE (F=0, I=0, R=3, E=1) |
+| **ステータス** | 完了 |
+
+### 変更詳細
+- **Perplexity完全削除**: sonar-pro/sonar-deep-research → gemini-2.5-flash/gemini-2.5-pro
+- **Google検索グラウンディング**: `use_search=True` パラメータで最新情報取得（PlayerValidator, StoreInvestigator, NewcomerDetector）
+- **LLMClient刷新**: provider パラメータ廃止、Gemini固定
+- **store_scraper_v3統合**: 内蔵LLMClientを削除し core/llm_client.py に統合
+- **UI簡略化**: プロバイダー選択selectbox削除、Gemini固定
+- **openaiパッケージ削除**: requirements.txt から openai>=1.0.0 を削除
+- **残存参照修正**: test_store_scraper_pages_visited.py, install.bat の PERPLEXITY_API_KEY 参照を修正
+
+### 既知の軽微な課題 (CTO [R]/[E])
+- キャッシュキーに `use_search` 未含（現在の利用パターンでは影響なし）
+- 旧SDKフォールバック時に `use_search` が暗黙に無視される（requirements.txt 通りなら発生しない）
+- `genai.Client` が毎回生成される（パフォーマンス上は問題なし）
+
+---
 
 ## セッション: 2026-02-17 (2)
 
@@ -81,7 +108,7 @@
 ### 主な機能
 1. **プレイヤー正誤チェック** (v4.0)
    - 撤退・統合・名称変更の自動検出
-   - Perplexity/Gemini APIによる最新情報取得
+   - Gemini APIによる最新情報取得
    - アラートレベル別レポート出力
 
 2. **汎用調査（テンプレート方式）** (v6.2 NEW)
@@ -120,7 +147,7 @@
 │   ├── __init__.py
 │   ├── async_helpers.py   # 非同期ヘルパー・動的並列化 (v6.0.1)
 │   ├── excel_handler.py   # Excel読み書き + AttributeInvestigationExporter
-│   ├── llm_client.py      # LLMクライアント（Perplexity/Gemini）
+│   ├── llm_client.py      # LLMクライアント（Gemini）
 │   ├── llm_cache.py       # LLMレスポンスキャッシュ (TTL付き) (v6.1)
 │   ├── sanitizer.py       # 入力サニタイザー共通化 (v6.0)
 │   ├── safe_parse.py      # 安全な型変換 (v6.0.1)
@@ -188,7 +215,6 @@
 `~/.env.local` に以下を設定：
 
 ```env
-PERPLEXITY_API_KEY=pplx-xxxxxxxxxxxxxxxx
 GOOGLE_API_KEY=AIzaxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -393,7 +419,7 @@ streamlit run app_v5.py
 - [ ] contextフィールドのサニタイズ強化
 
 ### 7.2 注意事項
-- Perplexity APIは従量課金（1件約$0.01-0.05）
+- Gemini APIは従量課金
 - 大量チェック時はコスト注意（属性調査のコスト概算UI参照）
 - 信頼度60%未満は手動確認推奨
 - 新規参入候補は**必ず手動確認してからエクスポート**

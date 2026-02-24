@@ -21,7 +21,7 @@ from investigators.newcomer_detector import NewcomerDetector
 from ui.common import display_verification_badge
 
 
-def render_newcomer_tab(provider: str, industry: str):
+def render_newcomer_tab(industry: str):
     """新規参入検出タブのUIをレンダリング"""
 
     st.subheader("新規参入プレイヤー検出")
@@ -107,7 +107,7 @@ def render_newcomer_tab(provider: str, industry: str):
         status_container.info("新規参入候補を検索中...")
 
         try:
-            llm = LLMClient(provider=provider)
+            llm = LLMClient()
             detector = NewcomerDetector(llm_client=llm)
 
             candidates = run_async(detector.detect(

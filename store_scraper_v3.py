@@ -11,7 +11,7 @@
 
 使用方法:
     from store_scraper_v3 import MultiStrategyScraper
-    scraper = MultiStrategyScraper(api_key="your_perplexity_key")
+    scraper = MultiStrategyScraper()
     stores = await scraper.scrape("アップルネット", "https://www.applenet.co.jp")
 """
 
@@ -31,6 +31,8 @@ from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+from core.llm_client import LLMClient
 
 from core.postal_prefecture import POSTAL_PREFIX_MAP, extract_prefecture_from_postal
 
@@ -219,62 +221,6 @@ def clean_html(html: str, max_length: int = 50000) -> str:
         text = text[:max_length]
 
     return text
-
-
-# ====================================
-# LLM API クライアント
-# ====================================
-class LLMClient:
-    """LLM API クライアント（Perplexity / Gemini対応）"""
-
-    def __init__(self, api_key: str, provider: str = "perplexity"):
-        self.api_key = api_key
-        self.provider = provider
-
-    def call(self, prompt: str, model: str = None, temperature: float = 0.1) -> str:
-        """LLM API呼び出し"""
-        if self.provider == "perplexity":
-            return self._call_perplexity(prompt, model or "sonar", temperature)
-        elif self.provider == "gemini":
-            return self._call_gemini(prompt, model or "gemini-2.0-flash", temperature)
-        else:
-            raise ValueError(f"Unknown provider: {self.provider}")
-
-    def _call_perplexity(self, prompt: str, model: str, temperature: float) -> str:
-        try:
-            response = requests.post(
-                "https://api.perplexity.ai/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": temperature,
-                    "max_tokens": 8000
-                },
-                timeout=120
-            )
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
-        except (requests.RequestException, KeyError, json.JSONDecodeError) as e:
-            raise RuntimeError(f"Perplexity API error: {e}")
-
-    def _call_gemini(self, prompt: str, model: str, temperature: float) -> str:
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            model_obj = genai.GenerativeModel(model)
-            response = model_obj.generate_content(
-                prompt,
-                generation_config={"temperature": temperature}
-            )
-            return response.text
-        except (ImportError, ValueError, AttributeError) as e:
-            raise RuntimeError(f"Gemini API error: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Gemini API unexpected error: {e}")
 
 
 # ====================================
@@ -1269,7 +1215,7 @@ class AIInferenceStrategy(ScrapingStrategy):
 """
 
         try:
-            text = llm.call(prompt, model="sonar-pro")
+            text = llm.call(prompt, model="gemini-2.5-flash")
             json_match = re.search(r'\{[\s\S]*\}', text)
             if json_match:
                 return json.loads(json_match.group())
@@ -1371,8 +1317,8 @@ class AIInferenceStrategy(ScrapingStrategy):
 """
 
         try:
-            # Perplexity の検索機能を活用
-            text = llm.call(prompt, model="sonar-pro")
+            # Gemini の検索機能を活用
+            text = llm.call(prompt, model="gemini-2.5-flash")
             json_match = re.search(r'\[[\s\S]*\]', text)
             if json_match:
                 items = json.loads(json_match.group())
@@ -1416,23 +1362,20 @@ class MultiStrategyScraper:
     def __init__(
         self,
         api_key: str = None,
-        provider: str = "perplexity",
         min_stores: int = 3
     ):
         """
         Args:
-            api_key: LLM API キー
-            provider: LLMプロバイダー ("perplexity" or "gemini")
+            api_key: Google API キー（未指定時は環境変数から取得）
             min_stores: 成功と判断する最小店舗数
         """
-        self.api_key = api_key or os.getenv("PERPLEXITY_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.provider = provider
+        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         self.min_stores = min_stores
 
         if not self.api_key:
-            raise ValueError("API key is required. Set PERPLEXITY_API_KEY or GOOGLE_API_KEY")
+            raise ValueError("API key is required. Set GOOGLE_API_KEY")
 
-        self.llm = LLMClient(self.api_key, provider)
+        self.llm = LLMClient(api_key=self.api_key)
 
         # 戦略の順序
         self.strategies: list[ScrapingStrategy] = [
@@ -1541,7 +1484,6 @@ async def main():
     parser = argparse.ArgumentParser(description="店舗情報スクレイパー v3.0")
     parser.add_argument("company_name", help="企業名")
     parser.add_argument("url", help="企業公式サイトURL")
-    parser.add_argument("--provider", default="perplexity", choices=["perplexity", "gemini"])
     parser.add_argument("--output", help="出力CSVファイル")
 
     args = parser.parse_args()
@@ -1551,7 +1493,7 @@ async def main():
     print(f"URL: {args.url}")
     print()
 
-    scraper = MultiStrategyScraper(provider=args.provider)
+    scraper = MultiStrategyScraper()
 
     result = await scraper.scrape(
         args.company_name,

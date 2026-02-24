@@ -3,11 +3,12 @@
 """
 LLM APIクライアント
 ==================
-Perplexity / Gemini API への統一インターフェース
+Gemini API 専用クライアント（Google検索グラウンディング対応）
 
-【対応プロバイダー】
-- Perplexity (sonar, sonar-pro, sonar-reasoning-pro)
-- Gemini (gemini-2.0-flash, gemini-1.5-pro)
+【対応モデル】
+- gemini-2.5-flash（高速、デフォルト）
+- gemini-2.5-pro（精密）
+- gemini-3-flash / gemini-3-pro
 """
 
 import json
@@ -16,7 +17,6 @@ import re
 from pathlib import Path
 from typing import Optional
 
-import requests
 from dotenv import load_dotenv
 
 # 環境変数読み込み（override=True で .env.local を優先）
@@ -25,25 +25,19 @@ load_dotenv(Path.home() / ".env.local", override=True)
 
 class LLMClient:
     """
-    LLM API クライアント
+    Gemini API クライアント
 
     【使用例】
     ```python
-    client = LLMClient(provider="perplexity")
-    response = await client.call_async("質問内容", model="sonar-pro")
+    client = LLMClient()
+    response = client.call("質問内容", model="gemini-2.5-flash")
+
+    # Google検索グラウンディング付き（最新情報が必要な場合）
+    response = client.call("質問内容", use_search=True)
     ```
     """
 
-    # Perplexity モデル
-    PERPLEXITY_MODELS = {
-        "sonar": "sonar",
-        "sonar-pro": "sonar-pro",
-        "sonar-reasoning": "sonar-reasoning",
-        "sonar-reasoning-pro": "sonar-reasoning-pro",
-        "sonar-deep-research": "sonar-deep-research",
-    }
-
-    # Gemini モデル（2026年1月時点の最新）
+    # Gemini モデル（2026年2月時点の最新）
     # 参考: https://ai.google.dev/gemini-api/docs/models
     GEMINI_MODELS = {
         "gemini-flash": "gemini-2.5-flash",
@@ -57,31 +51,23 @@ class LLMClient:
     def __init__(
         self,
         api_key: str = None,
-        provider: str = "perplexity",
         enable_cache: bool = False,
     ):
         """
         Args:
-            api_key: API キー（未指定時は環境変数から取得）
-            provider: LLMプロバイダー ("perplexity" or "gemini")
+            api_key: Google API キー（未指定時は環境変数 GOOGLE_API_KEY から取得）
             enable_cache: レスポンスキャッシュを有効化（デフォルト無効）
         """
-        self.provider = provider
         self._cache = None
 
         if enable_cache:
             from core.llm_cache import LLMCache
             self._cache = LLMCache(ttl_seconds=3600, max_size=500)
 
-        if provider == "perplexity":
-            self.api_key = api_key or os.getenv("PERPLEXITY_API_KEY")
-        elif provider == "gemini":
-            self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        else:
-            raise ValueError(f"Unknown provider: {provider}")
+        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
 
         if not self.api_key:
-            raise ValueError(f"{provider.upper()}_API_KEY is required")
+            raise ValueError("GOOGLE_API_KEY is required")
 
     def call(
         self,
@@ -90,16 +76,18 @@ class LLMClient:
         temperature: float = 0.1,
         max_tokens: int = 8000,
         system_prompt: str = None,
+        use_search: bool = False,
     ) -> str:
         """
-        LLM API を同期呼び出し
+        Gemini API を同期呼び出し
 
         Args:
             prompt: ユーザープロンプト
-            model: モデル名（未指定時はデフォルト）
+            model: モデル名（未指定時は gemini-2.5-flash）
             temperature: 生成温度
             max_tokens: 最大トークン数
             system_prompt: システムプロンプト（オプション）
+            use_search: Google検索グラウンディングを有効化（最新情報が必要な場合）
 
         Returns:
             生成されたテキスト
@@ -114,67 +102,13 @@ class LLMClient:
                 return cached
 
         # API呼び出し
-        if self.provider == "perplexity":
-            result = self._call_perplexity(prompt, model, temperature, max_tokens, system_prompt)
-        elif self.provider == "gemini":
-            result = self._call_gemini(prompt, model, temperature, max_tokens, system_prompt)
-        else:
-            raise ValueError(f"Unknown provider: {self.provider}")
+        result = self._call_gemini(prompt, model, temperature, max_tokens, system_prompt, use_search)
 
         # キャッシュに保存（有効時のみ）
         if self._cache is not None and cache_key is not None:
             self._cache.set(cache_key, result)
 
         return result
-
-    def _call_perplexity(
-        self,
-        prompt: str,
-        model: str = None,
-        temperature: float = 0.1,
-        max_tokens: int = 8000,
-        system_prompt: str = None,
-    ) -> str:
-        """Perplexity API 呼び出し"""
-        model = model or "sonar-pro"
-
-        # モデル名を正規化
-        if model in self.PERPLEXITY_MODELS:
-            model = self.PERPLEXITY_MODELS[model]
-
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        try:
-            response = requests.post(
-                "https://api.perplexity.ai/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
-                timeout=180,  # 3分
-            )
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
-
-        except requests.exceptions.Timeout as e:
-            raise RuntimeError(f"Perplexity API タイムアウト（180秒）: {e}")
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 401:
-                raise RuntimeError("Perplexity API 認証エラー: APIキーを確認してください")
-            elif e.response is not None and e.response.status_code == 429:
-                raise RuntimeError("Perplexity API レート制限: しばらく待ってから再試行してください")
-            raise RuntimeError(f"Perplexity API HTTPエラー: {e}")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Perplexity API 接続エラー: {e}")
 
     def _call_gemini(
         self,
@@ -183,8 +117,9 @@ class LLMClient:
         temperature: float = 0.1,
         max_tokens: int = 8000,
         system_prompt: str = None,
+        use_search: bool = False,
     ) -> str:
-        """Gemini API 呼び出し（新しい google.genai パッケージ使用）"""
+        """Gemini API 呼び出し（google.genai パッケージ使用）"""
 
         model = model or "gemini-2.5-flash"
 
@@ -204,12 +139,16 @@ class LLMClient:
             if system_prompt:
                 full_prompt = f"{system_prompt}\n\n{prompt}"
 
+            # Google検索グラウンディングの設定
+            tools = [types.Tool(google_search=types.GoogleSearch())] if use_search else None
+
             response = client.models.generate_content(
                 model=model,
                 contents=full_prompt,
                 config=types.GenerateContentConfig(
                     temperature=temperature,
                     max_output_tokens=max_tokens,
+                    tools=tools,
                 ),
             )
             return response.text
@@ -298,34 +237,27 @@ class LLMClient:
         return None
 
 
-def get_available_providers() -> dict[str, bool]:
+def is_api_available() -> bool:
     """
-    利用可能なLLMプロバイダーを確認
+    Gemini API が利用可能かを確認
 
     Returns:
-        dict: {provider_name: is_available}
+        bool: GOOGLE_API_KEY が設定されていれば True
     """
-    return {
-        "perplexity": bool(os.getenv("PERPLEXITY_API_KEY")),
-        "gemini": bool(os.getenv("GOOGLE_API_KEY")),
-    }
+    return bool(os.getenv("GOOGLE_API_KEY"))
 
 
 def get_default_client() -> LLMClient:
     """
-    利用可能なプロバイダーでデフォルトのクライアントを作成
+    デフォルトの Gemini クライアントを作成
 
     Returns:
-        LLMClient: 利用可能なクライアント
+        LLMClient: Gemini クライアント
 
     Raises:
-        ValueError: 利用可能なプロバイダーがない場合
+        ValueError: GOOGLE_API_KEY が未設定の場合
     """
-    providers = get_available_providers()
+    if not is_api_available():
+        raise ValueError("No LLM API key configured. Set GOOGLE_API_KEY in ~/.env.local")
 
-    if providers.get("perplexity"):
-        return LLMClient(provider="perplexity")
-    elif providers.get("gemini"):
-        return LLMClient(provider="gemini")
-    else:
-        raise ValueError("No LLM API key configured. Set PERPLEXITY_API_KEY or GOOGLE_API_KEY")
+    return LLMClient()

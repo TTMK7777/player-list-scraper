@@ -29,10 +29,9 @@ from ui.common import display_progress_log, display_filter_multiselect
 async def _run_investigation(
     companies: list[dict],
     mode: InvestigationMode,
-    provider: str,
     progress_container,
     status_container,
-    ai_model: str = "sonar-pro",
+    ai_model: str = "gemini-2.5-flash",
 ) -> list[StoreInvestigationResult]:
     """店舗調査を実行"""
 
@@ -43,12 +42,12 @@ async def _run_investigation(
         logs.append(log_msg)
         display_progress_log(logs, progress_container)
 
-    model_label = "精密" if ai_model == "sonar-deep-research" else "高速"
+    model_label = "精密" if ai_model == "gemini-2.5-pro" else "高速"
     status_container.info(f"🏪 {len(companies)}件の企業を調査中... (モード: {model_label})")
 
     try:
         # 店舗調査は短時間で変わらないのでキャッシュ有効
-        llm = LLMClient(provider=provider, enable_cache=True)
+        llm = LLMClient(enable_cache=True)
         investigator = StoreInvestigator(llm_client=llm, model=ai_model)
 
         results = await investigator.investigate_batch(
@@ -249,7 +248,7 @@ def _display_company_detail(result: StoreInvestigationResult):
 # ====================================
 # メインレンダリング
 # ====================================
-def render_store_tab(provider: str, industry: str):
+def render_store_tab(industry: str):
     """店舗調査タブのUIをレンダリング"""
 
     # タブ固有のセッション状態初期化
@@ -275,18 +274,18 @@ def render_store_tab(provider: str, industry: str):
     )
 
     # モード変換 & モデル選択
-    ai_model = "sonar-pro"
+    ai_model = "gemini-2.5-flash"
 
     if "AI調査（高速）" in mode_option:
         investigation_mode = InvestigationMode.AI
-        ai_model = "sonar-pro"
+        ai_model = "gemini-2.5-flash"
     elif "AI調査（精密）" in mode_option:
         investigation_mode = InvestigationMode.AI
-        ai_model = "sonar-deep-research"
+        ai_model = "gemini-2.5-pro"
         st.warning(
-            "⏳ **精密モード（sonar-deep-research）の注意事項**\n\n"
-            "- 1件あたり約5分かかります\n"
-            "- コストが約10〜50倍になります\n"
+            "⏳ **精密モード（gemini-2.5-pro）の注意事項**\n\n"
+            "- 高速モードより応答に時間がかかります\n"
+            "- コストが高くなります\n"
             "- 通常モードで `?` が多い場合のみ推奨\n\n"
             "まずは「AI調査（高速）」でテストしてください。"
         )
@@ -423,7 +422,6 @@ def render_store_tab(provider: str, industry: str):
             results = run_async(_run_investigation(
                 companies_to_check,
                 mode=investigation_mode,
-                provider=provider,
                 progress_container=progress_container,
                 status_container=status_container,
                 ai_model=ai_model,

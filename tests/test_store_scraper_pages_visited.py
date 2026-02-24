@@ -260,7 +260,7 @@ class TestMultiStrategyScraperPageCount:
         mock_response.text = "<html><body><h1>Test Store</h1></body></html>"
         mock_response.apparent_encoding = "utf-8"
 
-        with patch.dict("os.environ", {"PERPLEXITY_API_KEY": "test-key"}):
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}):
             scraper = MultiStrategyScraper(api_key="test-key")
 
         # LLMのモック
@@ -278,7 +278,7 @@ class TestMultiStrategyScraperPageCount:
     @pytest.mark.asyncio
     async def test_pages_visited_accumulates_across_strategies(self):
         """複数戦略の訪問ページ数が合算される"""
-        with patch.dict("os.environ", {"PERPLEXITY_API_KEY": "test-key"}):
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}):
             scraper = MultiStrategyScraper(api_key="test-key")
 
         # 各戦略のカウンターを手動設定
@@ -303,7 +303,7 @@ class TestMultiStrategyScraperPageCount:
     @pytest.mark.asyncio
     async def test_fresh_strategies_start_at_zero(self):
         """新しいスクレイパーの全戦略がカウント0で開始"""
-        with patch.dict("os.environ", {"PERPLEXITY_API_KEY": "test-key"}):
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}):
             scraper = MultiStrategyScraper(api_key="test-key")
 
         for strategy in scraper.strategies:

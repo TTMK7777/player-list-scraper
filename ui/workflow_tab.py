@@ -28,7 +28,7 @@ from investigators.player_validator import PlayerValidator
 from investigators.base import AlertLevel, ValidationResult
 
 
-def render_workflow_tab(provider: str, industry: str):
+def render_workflow_tab(industry: str):
     """3段階チェックタブのUIをレンダリング"""
 
     st.subheader("3段階チェック体制")
@@ -176,7 +176,7 @@ def render_workflow_tab(provider: str, industry: str):
         )
 
         try:
-            llm = LLMClient(provider=provider)
+            llm = LLMClient()
             validator = PlayerValidator(llm_client=llm)
 
             results = run_async(validator.validate_batch(

@@ -28,7 +28,6 @@ from ui.common import display_progress_log, display_filter_multiselect
 async def _run_validation(
     players: list[PlayerData],
     industry: str,
-    provider: str,
     progress_container,
     status_container,
 ) -> list[ValidationResult]:
@@ -44,7 +43,7 @@ async def _run_validation(
     status_container.info(f"🔍 {len(players)}件のプレイヤーをチェック中...")
 
     try:
-        llm = LLMClient(provider=provider)
+        llm = LLMClient()
         validator = PlayerValidator(llm_client=llm)
 
         results = await validator.validate_batch(
@@ -217,7 +216,7 @@ def _export_results(results: list[ValidationResult]) -> bytes:
 # ====================================
 # メインレンダリング
 # ====================================
-def render_validation_tab(provider: str, industry: str):
+def render_validation_tab(industry: str):
     """正誤チェックタブのUIをレンダリング"""
 
     # タブ固有のセッション状態初期化
@@ -300,7 +299,6 @@ def render_validation_tab(provider: str, industry: str):
             results = run_async(_run_validation(
                 players_to_check,
                 industry=industry,
-                provider=provider,
                 progress_container=progress_container,
                 status_container=status_container,
             ))

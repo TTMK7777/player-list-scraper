@@ -69,7 +69,6 @@ echo.
 echo 次のステップ:
 echo   1. APIキーを設定:
 echo      ~/.env.local に以下を追加
-echo      PERPLEXITY_API_KEY=pplx-xxxxx
 echo      GOOGLE_API_KEY=AIzaSy-xxxxx
 echo.
 echo   2. 起動:

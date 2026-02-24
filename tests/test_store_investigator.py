@@ -213,7 +213,7 @@ class TestStoreInvestigator:
         investigator = StoreInvestigator(llm_client=mock_llm_client_success)
 
         assert investigator.llm == mock_llm_client_success
-        assert investigator.model == "sonar-pro"
+        assert investigator.model == "gemini-2.5-flash"
         assert investigator.CONFIDENCE_THRESHOLD == 0.7
 
     def test_sanitize_input(self, mock_llm_client_success):

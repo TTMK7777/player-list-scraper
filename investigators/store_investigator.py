@@ -67,7 +67,7 @@ class StoreInvestigator:
     def __init__(
         self,
         llm_client=None,
-        model: str = "sonar-pro",
+        model: str = "gemini-2.5-flash",
     ):
         """
         Args:
@@ -191,7 +191,7 @@ class StoreInvestigator:
 
         try:
             # LLM呼び出し
-            response = llm.call(prompt, model=self.model)
+            response = llm.call(prompt, model=self.model, use_search=True)
             log("LLMレスポンスを解析中...")
 
             # レスポンス解析

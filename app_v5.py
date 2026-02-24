@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-プレイヤーリスト調査システム GUI v6.1
+プレイヤーリスト調査システム GUI v6.3
 =====================================
 v3（店舗調査）とv4（正誤チェック）を統合。
 AI調査をデフォルトとし、スクレイピングはオプションとして併存。
@@ -28,7 +28,7 @@ import streamlit as st
 # 自作モジュールのパスを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.llm_client import get_available_providers
+from core.llm_client import is_api_available
 from ui.attribute_tab import render_investigation_tab
 from ui.newcomer_tab import render_newcomer_tab
 from ui.store_tab import render_store_tab
@@ -37,7 +37,7 @@ from ui.workflow_tab import render_workflow_tab
 
 # ページ設定
 st.set_page_config(
-    page_title="プレイヤーリスト調査システム v6.1",
+    page_title="プレイヤーリスト調査システム v6.3",
     page_icon="🔍",
     layout="wide",
 )
@@ -131,20 +131,19 @@ st.markdown("""
 # ====================================
 # API初期化
 # ====================================
-def init_apis() -> dict[str, bool]:
-    """API設定を初期化し、利用可能なプロバイダーを返す"""
+def init_apis() -> bool:
+    """API設定を初期化し、Gemini API の利用可否を返す"""
     from dotenv import load_dotenv
     load_dotenv(Path.home() / ".env.local", override=True)
 
-    providers = get_available_providers()
-    return providers
+    return is_api_available()
 
 
 # ====================================
 # メインUI
 # ====================================
 def main():
-    st.title("🔍 プレイヤーリスト調査システム v6.1")
+    st.title("🔍 プレイヤーリスト調査システム v6.3")
     st.caption("正誤チェック + 汎用調査 + 店舗調査 + 新規参入検出 + 3段階チェック | AI調査（推奨）")
 
     # ====================================
@@ -154,31 +153,15 @@ def main():
         st.header("⚙️ 設定")
 
         # API状態
-        providers = init_apis()
+        api_available = init_apis()
 
         st.subheader("🔑 API接続")
-        if providers.get("perplexity"):
-            st.success("✅ Perplexity: 接続OK")
-        else:
-            st.warning("⚠️ Perplexity: 未設定")
-
-        if providers.get("gemini"):
+        if api_available:
             st.success("✅ Gemini: 接続OK")
         else:
-            st.warning("⚠️ Gemini: 未設定")
-
-        if not any(providers.values()):
-            st.error("❌ APIキーが設定されていません")
-            st.info("~/.env.local に PERPLEXITY_API_KEY または GOOGLE_API_KEY を設定してください")
+            st.error("❌ GOOGLE_API_KEY が設定されていません")
+            st.info("~/.env.local に GOOGLE_API_KEY を設定してください")
             st.stop()
-
-        # プロバイダー選択
-        available_providers = [k for k, v in providers.items() if v]
-        provider = st.selectbox(
-            "使用するLLM",
-            available_providers,
-            format_func=lambda x: "Perplexity (推奨)" if x == "perplexity" else "Gemini",
-        )
 
         st.divider()
 
@@ -248,15 +231,15 @@ def main():
     # 機能分岐（各タブモジュールに委譲）
     # ====================================
     if "汎用調査" in function_type:
-        render_investigation_tab(provider=provider, industry=industry)
+        render_investigation_tab(industry=industry)
     elif "新規参入検出" in function_type:
-        render_newcomer_tab(provider=provider, industry=industry)
+        render_newcomer_tab(industry=industry)
     elif "3段階チェック" in function_type:
-        render_workflow_tab(provider=provider, industry=industry)
+        render_workflow_tab(industry=industry)
     elif "正誤チェック" in function_type:
-        render_validation_tab(provider=provider, industry=industry)
+        render_validation_tab(industry=industry)
     elif "店舗調査" in function_type:
-        render_store_tab(provider=provider, industry=industry)
+        render_store_tab(industry=industry)
 
 
 if __name__ == "__main__":

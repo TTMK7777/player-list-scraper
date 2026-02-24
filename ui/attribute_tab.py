@@ -87,14 +87,13 @@ def _sanitize_template_id(text: str) -> str:
 # ---------------------------------------------------------------------------
 # メインレンダー関数
 # ---------------------------------------------------------------------------
-def render_investigation_tab(provider: str, industry: str) -> None:
+def render_investigation_tab(industry: str) -> None:
     """汎用調査タブのUIをレンダリング。
 
     テンプレート選択/管理 + プレイヤー入力 + 調査実行 + 結果表示の
     4セクション構成。
 
     Args:
-        provider: 使用する LLM プロバイダー名。
         industry: 対象業界名。
     """
     st.subheader("📊 汎用調査")
@@ -427,7 +426,7 @@ def render_investigation_tab(provider: str, industry: str) -> None:
         status_container.info(f"{len(players_to_check)}件のプレイヤーを調査中...")
 
         try:
-            llm = LLMClient(provider=provider)
+            llm = LLMClient()
             inv = AttributeInvestigator(llm_client=llm)
 
             results = run_async(inv.investigate_batch(
@@ -515,11 +514,10 @@ def render_investigation_tab(provider: str, industry: str) -> None:
 # ---------------------------------------------------------------------------
 # 後方互換ラッパー
 # ---------------------------------------------------------------------------
-def render_attribute_tab(provider: str, industry: str) -> None:
+def render_attribute_tab(industry: str) -> None:
     """後方互換ラッパー。render_investigation_tab を呼び出す。
 
     Args:
-        provider: LLM プロバイダー名。
         industry: 対象業界名。
     """
-    render_investigation_tab(provider=provider, industry=industry)
+    render_investigation_tab(industry=industry)

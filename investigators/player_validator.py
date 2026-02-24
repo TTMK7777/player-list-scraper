@@ -71,7 +71,7 @@ class PlayerValidator:
     def __init__(
         self,
         llm_client: LLMClient = None,
-        model: str = "sonar-pro",
+        model: str = "gemini-2.5-flash",
     ):
         """
         Args:
@@ -266,9 +266,7 @@ class PlayerValidator:
 
         # LLM呼び出し（同期を非同期でラップ）
         response = await asyncio.to_thread(
-            self.llm.call,
-            prompt,
-            self.model,
+            lambda: self.llm.call(prompt, model=self.model, use_search=True)
         )
         return response
 

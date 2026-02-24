@@ -51,7 +51,7 @@ class NewcomerDetector:
     def __init__(
         self,
         llm_client=None,
-        model: str = "sonar-pro",
+        model: str = "gemini-2.5-flash",
     ):
         """
         Args:
@@ -161,7 +161,7 @@ class NewcomerDetector:
         loop = asyncio.get_running_loop()
         raw_response = await loop.run_in_executor(
             None,
-            lambda: llm.call(prompt, model=self.model, temperature=0.1)
+            lambda: llm.call(prompt, model=self.model, temperature=0.1, use_search=True)
         )
 
         return self._parse_response(raw_response)

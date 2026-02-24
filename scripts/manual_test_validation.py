@@ -15,7 +15,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 # モジュールパスを追加
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.llm_client import get_available_providers, get_default_client
+from core.llm_client import is_api_available, get_default_client
 from investigators.player_validator import PlayerValidator
 from investigators.base import AlertLevel
 
@@ -28,15 +28,14 @@ async def test_single_validation():
     print("=" * 60)
 
     # API確認
-    providers = get_available_providers()
+    api_available = is_api_available()
     print(f"\n📡 利用可能なAPI:")
-    for name, available in providers.items():
-        status = "✅" if available else "❌"
-        print(f"  {status} {name}")
+    status = "✅" if api_available else "❌"
+    print(f"  {status} Gemini")
 
-    if not any(providers.values()):
+    if not api_available:
         print("\n❌ APIキーが設定されていません")
-        print("~/.env.local に PERPLEXITY_API_KEY または GOOGLE_API_KEY を設定してください")
+        print("~/.env.local に GOOGLE_API_KEY を設定してください")
         return
 
     # テスト対象（実在のサービス）
@@ -49,18 +48,12 @@ async def test_single_validation():
         },
     ]
 
-    # バリデーター作成（Perplexityを優先 - Web検索能力が高い）
+    # バリデーター作成
     try:
         from core.llm_client import LLMClient
-        # Perplexityを優先で使用
-        if providers.get("perplexity"):
-            llm = LLMClient(provider="perplexity")
-            validator = PlayerValidator(llm_client=llm, model="sonar-pro")
-            print("\n📌 使用API: Perplexity (sonar-pro)")
-        elif providers.get("gemini"):
-            llm = LLMClient(provider="gemini")
-            validator = PlayerValidator(llm_client=llm, model="gemini-2.5-flash")
-            print("\n📌 使用API: Gemini (gemini-2.5-flash)")
+        llm = LLMClient()
+        validator = PlayerValidator(llm_client=llm, model="gemini-2.5-flash")
+        print("\n📌 使用API: Gemini (gemini-2.5-flash)")
     except Exception as e:
         print(f"\n❌ バリデーター作成エラー: {e}")
         return

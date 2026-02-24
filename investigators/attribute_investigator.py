@@ -51,7 +51,7 @@ class AttributeInvestigator:
     def __init__(
         self,
         llm_client=None,
-        model: str = "sonar-pro",
+        model: str = "gemini-2.5-flash",
     ):
         """
         Args:
