@@ -147,9 +147,33 @@ def init_apis() -> bool:
 
 
 # ====================================
+# パスワード認証
+# ====================================
+def check_password() -> bool:
+    """パスワード認証画面を表示し、認証済みなら True を返す"""
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("🔐 プレイヤーリスト調査システム")
+    st.subheader("ログイン")
+    password = st.text_input("パスワード", type="password", placeholder="パスワードを入力")
+
+    if st.button("ログイン", type="primary"):
+        app_password = st.secrets.get("APP_PASSWORD", "")
+        if app_password and password == app_password:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("パスワードが違います")
+
+    st.stop()
+
+
+# ====================================
 # メインUI
 # ====================================
 def main():
+    check_password()
     st.title("🔍 プレイヤーリスト調査システム v6.3")
     st.caption("正誤チェック + 汎用調査 + 店舗調査 + 新規参入検出 + 3段階チェック | AI調査（推奨）")
 
