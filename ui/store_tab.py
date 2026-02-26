@@ -218,6 +218,14 @@ def render_store_tab():
 
     st.info("企業の**店舗・教室数**を都道府県別に調査します。AI調査（推奨）またはスクレイピングで取得します。")
 
+    # 業界設定（store調査のコンテキスト用）
+    industry = st.text_input(
+        "対象業界（任意）",
+        placeholder="例: コーヒーチェーン、フィットネスクラブ",
+        help="LLMの調査精度向上のため入力を推奨します",
+        key="store_industry_input",
+    )
+
     # タブ固有のセッション状態初期化
     if "store_companies" not in st.session_state:
         st.session_state.store_companies = []
@@ -295,7 +303,7 @@ def render_store_tab():
                     companies.append({
                         "company_name": p.company_name or p.player_name,
                         "official_url": p.official_url,
-                        "industry": "",
+                        "industry": industry,
                     })
 
                 st.session_state.store_companies = companies

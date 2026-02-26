@@ -80,8 +80,7 @@ async def test_single_validation():
             print(f"  アラートレベル: {result.alert_level.value}")
             print(f"  ステータス: {result.status.value}")
             print(f"  変更タイプ: {result.change_type.value}")
-            print(f"  信頼度: {result.confidence * 100:.0f}%")
-            print(f"  要手動確認: {'はい' if result.needs_manual_review else 'いいえ'}")
+            print(f"  要確認: {'はい' if result.needs_manual_review else 'いいえ'}")
 
             if result.player_name_original != result.player_name_current:
                 print(f"  名称変更: {result.player_name_original} → {result.player_name_current}")

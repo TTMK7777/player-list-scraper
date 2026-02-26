@@ -64,6 +64,11 @@ class StoreInvestigator:
         r"```.*system",
     ]
 
+    @staticmethod
+    def is_confident(result: StoreInvestigationResult) -> bool:
+        """AI調査結果を採用してよいか判定する（ハイブリッドモード用）"""
+        return not result.needs_verification and result.total_stores > 0
+
     def __init__(
         self,
         llm_client=None,
@@ -456,8 +461,8 @@ class StoreInvestigator:
             company_name, official_url, industry, log
         )
 
-        # Step 2: needs_verification チェック
-        if not ai_result.needs_verification:
+        # Step 2: 信頼度チェック（is_confident: needs_verification=False かつ total_stores>0）
+        if StoreInvestigator.is_confident(ai_result):
             log("AI調査の結果が十分です")
             ai_result = StoreInvestigationResult(
                 company_name=ai_result.company_name,

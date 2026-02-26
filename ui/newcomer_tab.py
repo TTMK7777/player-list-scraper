@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -89,10 +90,11 @@ def render_newcomer_tab():
     if filename:
         # ファイル名から業界を推測（例: "動画配信プレイヤーリスト.xlsx" → "動画配信サービス"）
         stem = Path(filename).stem
-        # 不要語を除去してそのまま使う（LLMが文脈として理解できる）
-        for noise in ["プレイヤーリスト", "一覧", "リスト", "調査", "用"]:
-            stem = stem.replace(noise, "").strip()
-        auto_industry = stem
+        # ノイズ語・数字・記号・バージョン番号を除去
+        stem = re.sub(r"(プレイヤーリスト|一覧|リスト|調査|用)", "", stem)
+        stem = re.sub(r"[_\-v\d\.]+", "", stem)  # バージョン番号・記号除去
+        stem = stem.strip()
+        auto_industry = stem if stem else ""  # 空文字フォールバック（ユーザーが手入力）
     industry = st.text_input(
         "業界名",
         value=auto_industry,
