@@ -2,7 +2,37 @@
 
 > **最終更新**: 2026-02-26
 > **担当**: Claude Sonnet 4.6 + たいむさん
-> **バージョン**: v6.3
+> **バージョン**: v6.4
+
+## セッション: 2026-02-26 (3)
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v6.4: 信頼度削除・業界自動推測・モード説明 → /AI-2G レビュー → 指摘修正 |
+| **変更ファイル** | 22ファイル（v6.4）+ 4ファイル（fix） |
+| **テスト** | 363件全パス |
+| **品質ゲート** | /AI-2G（Claude+Gemini+GPT）🟢 + 指摘P0/P1を即修正 |
+| **ステータス** | 完了 |
+
+### 変更詳細（v6.4）
+- **信頼度（confidence）削除**: 全4データクラスから `confidence: float` を除去 → `needs_verification`/`needs_manual_review` に統一
+- **業界設定簡略化**: サイドバーselectbox → text_input。newcomer_tab/store_tabはタブ内で自前管理（ファイル名自動推測）
+- **モード説明追加**: 全5タブ先頭に `st.info()` で簡易説明
+- **ロギング**: `core/logger.py` 新設。`Logs/app.log` に日次ローテーション（30日保持）
+
+### 変更詳細（AI-2G指摘修正）
+- **🔴 P0**: `scripts/manual_test_validation.py:83` の `result.confidence` 削除（AttributeError修正）
+- **🔴 P0**: `store_tab.py` に industry 自前入力フィールド追加、`"industry":""` バグ修正
+- **🟡 P1**: `store_investigator.py` に `is_confident()` ヘルパー追加、hybrid判定を `total_stores > 0` 条件追加
+- **🟡 P1**: `newcomer_tab.py` 業界推測を正規表現化（バージョン番号・記号除去、空文字フォールバック）
+
+### 残課題（AI-2G [P2]）
+- `is_confident()` の判定ロジックをさらに一元化（各所の散在防止）
+- `industry: Optional[str]` で型定義を明確化（空文字廃止、None明示）
+- pydantic によるLLM出力スキーマバリデーション導入
+
+---
 
 ## セッション: 2026-02-26 (2)
 
