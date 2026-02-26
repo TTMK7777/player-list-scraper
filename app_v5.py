@@ -28,7 +28,11 @@ import streamlit as st
 # 自作モジュールのパスを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.logger import setup_logging
 from core.llm_client import is_api_available
+
+# ロギング設定（モジュール読み込み時に1度だけ実行）
+setup_logging()
 from ui.attribute_tab import render_investigation_tab
 from ui.newcomer_tab import render_newcomer_tab
 from ui.store_tab import render_store_tab

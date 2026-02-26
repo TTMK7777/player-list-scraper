@@ -95,7 +95,8 @@ APP_PASSWORD   = "チームで決めたパスワード"
 │   ├── investigation_templates.py # 調査テンプレート管理 (v6.2)
 │   ├── postal_prefecture.py     # 郵便番号→都道府県変換
 │   ├── check_history.py         # チェック履歴管理 + 差分計算
-│   └── check_workflow.py        # 3段階ワークフロー管理
+│   ├── check_workflow.py        # 3段階ワークフロー管理
+│   └── logger.py                # ロギング設定 (日次ローテーション → Logs/)
 │
 ├── investigators/               # 調査モジュール
 │   ├── base.py                  # データ型定義
@@ -117,6 +118,9 @@ APP_PASSWORD   = "チームで決めたパスワード"
 │   └── user/                    # ユーザー作成 (gitignore)
 │
 ├── store_scraper_v3.py          # 店舗スクレイピングエンジン
+│
+├── Logs/                        # エラーログ (gitignore, 30日保持)
+│   └── app.log                  # 日次ローテーション
 │
 ├── tests/                       # テストスイート (pytest, 367件)
 │   ├── conftest.py              # 共通フィクスチャ
