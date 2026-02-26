@@ -249,7 +249,6 @@ class ValidationReportExporter:
         "公式URL（現在）",
         "運営会社（元）",
         "運営会社（現在）",
-        "信頼度",
         "要確認フラグ",
         "関連ニュース",
         "情報ソース",
@@ -329,7 +328,6 @@ class ValidationReportExporter:
             result.url_current,
             getattr(result, "company_name_original", ""),
             getattr(result, "company_name_current", ""),
-            f"{result.confidence * 100:.0f}%",
             "TRUE" if result.needs_manual_review else "FALSE",
             result.news_summary or "",
             "\n".join(result.source_urls) if result.source_urls else "",
@@ -343,7 +341,7 @@ class ValidationReportExporter:
 
     def _adjust_column_widths(self) -> None:
         """列幅を調整"""
-        column_widths = [8, 20, 20, 15, 40, 30, 30, 20, 20, 10, 12, 40, 40, 20]
+        column_widths = [8, 20, 20, 15, 40, 30, 30, 20, 20, 12, 40, 40, 20]
         for col_idx, width in enumerate(column_widths, start=1):
             col_letter = get_column_letter(col_idx)
             self.sheet.column_dimensions[col_letter].width = width
@@ -355,7 +353,7 @@ class StoreInvestigationExporter:
 
     【出力形式】
     - 企業情報、店舗数
-    - 調査モード、信頼度
+    - 調査モード
     - 47都道府県別の店舗数
     - ソースURL（必須）
     """
@@ -371,11 +369,11 @@ class StoreInvestigationExporter:
         "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
     ]
 
-    # 信頼度別の色
-    CONFIDENCE_COLORS = {
-        "high": "6BCB77",     # 緑（0.8以上）
-        "medium": "FFD93D",   # 黄色（0.5-0.8）
-        "low": "FF6B6B",      # 赤（0.5未満）
+    # ステータス別の色
+    STATUS_COLORS = {
+        "normal": "6BCB77",        # 緑（正常）
+        "verification": "FFD93D",  # 黄（要確認）
+        "error": "FF6B6B",         # 赤（エラー）
     }
 
     # 基本ヘッダー列
@@ -385,7 +383,6 @@ class StoreInvestigationExporter:
         "直営店",
         "FC店",
         "調査モード",
-        "信頼度",
         "要確認フラグ",
     ]
 
@@ -463,19 +460,13 @@ class StoreInvestigationExporter:
 
     def _write_row(self, row_idx: int, result) -> None:
         """1行を書き込み"""
-        # 信頼度に応じた色
-        if result.confidence >= 0.8:
-            fill_color = self.CONFIDENCE_COLORS["high"]
-        elif result.confidence >= 0.5:
-            fill_color = self.CONFIDENCE_COLORS["medium"]
-        else:
-            fill_color = self.CONFIDENCE_COLORS["low"]
-
-        # 要確認の場合は別色
+        # needs_verification に応じた色分け
         if result.needs_verification:
-            row_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
+            fill_color = self.STATUS_COLORS["verification"]
         else:
-            row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+            fill_color = self.STATUS_COLORS["normal"]
+
+        row_fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
 
         # 基本データ
         row_data = [
@@ -484,7 +475,6 @@ class StoreInvestigationExporter:
             result.direct_stores if result.direct_stores is not None else "",
             result.franchise_stores if result.franchise_stores is not None else "",
             result.investigation_mode,
-            f"{result.confidence * 100:.0f}%",
             "TRUE" if result.needs_verification else "FALSE",
         ]
 
@@ -534,7 +524,7 @@ class StoreInvestigationExporter:
                 width = 25
             elif col_name in ("総店舗数", "直営店", "FC店"):
                 width = 10
-            elif col_name in ("調査モード", "信頼度", "要確認フラグ"):
+            elif col_name in ("調査モード", "要確認フラグ"):
                 width = 12
             elif col_name == "ソースURL":
                 width = 50
@@ -557,15 +547,8 @@ class AttributeInvestigationExporter:
     【出力形式】
     - 行: プレイヤー
     - 列: 属性 → ○/×/? マトリクス
-    - 信頼度、ソースURL
+    - ソースURL
     """
-
-    # 信頼度別の色
-    CONFIDENCE_COLORS = {
-        "high": "6BCB77",     # 緑（0.8以上）
-        "medium": "FFD93D",   # 黄色（0.5-0.8）
-        "low": "FF6B6B",      # 赤（0.5未満）
-    }
 
     # 属性値別の色
     ATTRIBUTE_COLORS = {
@@ -581,7 +564,6 @@ class AttributeInvestigationExporter:
 
     # 後続ヘッダー列
     SUFFIX_COLUMNS = [
-        "信頼度",
         "要確認フラグ",
         "ソースURL",
         "調査日時",
@@ -653,14 +635,6 @@ class AttributeInvestigationExporter:
 
     def _write_row(self, row_idx: int, result) -> None:
         """1行を書き込み"""
-        # 信頼度に応じた行色
-        if result.confidence >= 0.8:
-            row_fill_color = self.CONFIDENCE_COLORS["high"]
-        elif result.confidence >= 0.5:
-            row_fill_color = self.CONFIDENCE_COLORS["medium"]
-        else:
-            row_fill_color = self.CONFIDENCE_COLORS["low"]
-
         col_idx = 1
 
         # プレイヤー名
@@ -689,16 +663,6 @@ class AttributeInvestigationExporter:
             cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
             col_idx += 1
-
-        # 信頼度
-        confidence_cell = self.sheet.cell(
-            row=row_idx, column=col_idx,
-            value=f"{result.confidence * 100:.0f}%"
-        )
-        confidence_cell.fill = PatternFill(
-            start_color=row_fill_color, end_color=row_fill_color, fill_type="solid"
-        )
-        col_idx += 1
 
         # 要確認フラグ
         self.sheet.cell(
@@ -729,7 +693,7 @@ class AttributeInvestigationExporter:
 
             if col_name == "プレイヤー名":
                 width = 25
-            elif col_name in ("信頼度", "要確認フラグ"):
+            elif col_name == "要確認フラグ":
                 width = 12
             elif col_name == "ソースURL":
                 width = 50

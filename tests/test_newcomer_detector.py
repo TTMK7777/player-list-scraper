@@ -98,14 +98,12 @@ class TestNewcomerCandidate:
         assert candidate.official_url == ""
         assert candidate.verification_status == "unverified"
         assert candidate.url_verified is False
-        assert candidate.confidence == 0.0
 
     def test_to_dict(self):
         """辞書変換"""
         candidate = NewcomerCandidate(
             player_name="テストサービス",
             official_url="https://example.com",
-            confidence=0.8,
             verification_status="verified",
             url_verified=True,
         )
@@ -128,7 +126,6 @@ class TestResponseParsing:
 
         assert len(candidates) == 2
         assert candidates[0].player_name == "新動画サービスA"
-        assert candidates[0].confidence == 0.8
         assert candidates[0].verification_status == "unverified"
 
     def test_parse_empty_array(self, mock_llm_newcomer_empty):
@@ -218,16 +215,16 @@ class TestUrlVerification:
 
 
 # ====================================
-# 信頼度再計算テスト
+# URL検証ステータステスト
 # ====================================
-class TestConfidenceRecalculation:
-    """信頼度再計算のテスト"""
+class TestUrlVerificationStatus:
+    """URL検証によるステータス変更のテスト"""
 
     @pytest.mark.asyncio
-    async def test_url_verified_keeps_confidence(
+    async def test_url_verified_status(
         self, mock_llm_newcomer_success, existing_players
     ):
-        """URL検証済みの場合、信頼度は変更なし"""
+        """URL検証成功 → verified ステータス"""
         detector = NewcomerDetector(llm_client=mock_llm_newcomer_success)
 
         with patch.object(detector, "_verify_url") as mock_verify:
@@ -235,16 +232,14 @@ class TestConfidenceRecalculation:
 
             candidates = await detector.detect("動画配信サービス", existing_players)
 
-            # URL検証OKなので信頼度変更なし
-            assert candidates[0].confidence == 0.8
             assert candidates[0].url_verified is True
             assert candidates[0].verification_status == "verified"
 
     @pytest.mark.asyncio
-    async def test_url_error_halves_confidence(
+    async def test_url_error_status(
         self, mock_llm_newcomer_success, existing_players
     ):
-        """URL検証失敗の場合、信頼度が半減"""
+        """URL検証失敗 → url_error ステータス"""
         detector = NewcomerDetector(llm_client=mock_llm_newcomer_success)
 
         with patch.object(detector, "_verify_url") as mock_verify:
@@ -252,8 +247,6 @@ class TestConfidenceRecalculation:
 
             candidates = await detector.detect("動画配信サービス", existing_players)
 
-            # URL検証NGで信頼度半減
-            assert candidates[0].confidence == 0.4  # 0.8 * 0.5
             assert candidates[0].url_verified is False
             assert candidates[0].verification_status == "url_error"
 

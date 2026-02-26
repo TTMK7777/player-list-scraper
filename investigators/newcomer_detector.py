@@ -35,7 +35,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import NewcomerCandidate
 from core.sanitizer import sanitize_input, sanitize_url, verify_url
-from core.safe_parse import safe_float
 
 
 class NewcomerDetector:
@@ -106,11 +105,6 @@ class NewcomerDetector:
                     candidate.verification_status = "url_error"
             else:
                 candidate.verification_status = "unverified"
-
-        # Step 3: 信頼度再計算（URL検証結果を反映）
-        for candidate in candidates:
-            if not candidate.url_verified and candidate.official_url:
-                candidate.confidence *= 0.5  # URL不明は信頼度半減
 
         if on_progress:
             on_progress(3, 3, "検出完了")
@@ -210,7 +204,6 @@ class NewcomerDetector:
                 official_url=official_url,
                 company_name=item.get("company_name", ""),
                 entry_date_approx=item.get("entry_date_approx", ""),
-                confidence=safe_float(item.get("confidence"), default=0.5),
                 source_urls=source_urls,
                 reason=item.get("reason", ""),
                 verification_status="unverified",

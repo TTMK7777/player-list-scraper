@@ -54,7 +54,6 @@ class ValidationResult:
     - url_current: 現在のURL（変更があれば）
     - company_name_original: 元の運営会社名
     - company_name_current: 現在の運営会社名
-    - confidence: 信頼度 (0.0-1.0)
     - source_urls: 情報源URL
     - news_summary: 関連ニュース（撤退・統合等の重大情報）
     - checked_at: チェック実行日時
@@ -70,7 +69,6 @@ class ValidationResult:
     url_current: str = ""
     company_name_original: str = ""
     company_name_current: str = ""
-    confidence: float = 0.0
     source_urls: list[str] = field(default_factory=list)
     news_summary: str = ""
     checked_at: datetime = field(default_factory=datetime.now)
@@ -83,7 +81,6 @@ class ValidationResult:
         player_name: str,
         url: str = "",
         company_name: str = "",
-        confidence: float = 0.9,
         source_urls: list[str] = None,
     ) -> "ValidationResult":
         """変更なしの結果を作成"""
@@ -97,7 +94,6 @@ class ValidationResult:
             url_current=url,
             company_name_original=company_name,
             company_name_current=company_name,
-            confidence=confidence,
             source_urls=source_urls or [],
             needs_manual_review=False,
         )
@@ -119,7 +115,6 @@ class ValidationResult:
             change_details=[f"エラー: {error_message}"],
             url_original=url,
             url_current=url,
-            confidence=0.0,
             needs_manual_review=True,
         )
 
@@ -140,7 +135,6 @@ class ValidationResult:
             change_details=[f"要確認: {reason}"] if reason else [],
             url_original=url,
             url_current=url,
-            confidence=0.4,
             needs_manual_review=True,
         )
 
@@ -157,7 +151,6 @@ class ValidationResult:
             "url_current": self.url_current,
             "company_name_original": self.company_name_original,
             "company_name_current": self.company_name_current,
-            "confidence": self.confidence,
             "source_urls": self.source_urls,
             "news_summary": self.news_summary,
             "checked_at": self.checked_at.isoformat() if self.checked_at else "",
@@ -190,7 +183,6 @@ class StoreInvestigationResult:
     - direct_stores: 直営店数（判別可能な場合）
     - franchise_stores: FC店数（判別可能な場合）
     - prefecture_distribution: 都道府県別店舗分布 {"東京都": 10, ...}
-    - confidence: 信頼度 (0.0-1.0)
     - source_urls: 情報源URL（必須 - 検証用）
     - investigation_date: 調査実行日時
     - investigation_mode: 調査モード ("ai" / "scraping" / "hybrid")
@@ -200,7 +192,6 @@ class StoreInvestigationResult:
     """
     company_name: str
     total_stores: int
-    confidence: float
     source_urls: list[str]  # 必須（検証用）
     investigation_date: datetime
     investigation_mode: str  # "ai" / "scraping" / "hybrid"
@@ -218,7 +209,6 @@ class StoreInvestigationResult:
         total_stores: int,
         source_urls: list[str],
         investigation_mode: str,
-        confidence: float = 0.9,
         direct_stores: Optional[int] = None,
         franchise_stores: Optional[int] = None,
         prefecture_distribution: Optional[dict[str, int]] = None,
@@ -228,7 +218,6 @@ class StoreInvestigationResult:
         return cls(
             company_name=company_name,
             total_stores=total_stores,
-            confidence=confidence,
             source_urls=source_urls,
             investigation_date=datetime.now(),
             investigation_mode=investigation_mode,
@@ -252,7 +241,6 @@ class StoreInvestigationResult:
         return cls(
             company_name=company_name,
             total_stores=0,
-            confidence=0.3,
             source_urls=source_urls or [],
             investigation_date=datetime.now(),
             investigation_mode=investigation_mode,
@@ -272,7 +260,6 @@ class StoreInvestigationResult:
         return cls(
             company_name=company_name,
             total_stores=0,
-            confidence=0.0,
             source_urls=[],
             investigation_date=datetime.now(),
             investigation_mode=investigation_mode,
@@ -288,7 +275,6 @@ class StoreInvestigationResult:
             "direct_stores": self.direct_stores,
             "franchise_stores": self.franchise_stores,
             "prefecture_distribution": self.prefecture_distribution,
-            "confidence": self.confidence,
             "source_urls": self.source_urls,
             "investigation_date": self.investigation_date.isoformat() if self.investigation_date else "",
             "investigation_mode": self.investigation_mode,
@@ -305,7 +291,6 @@ class AttributeInvestigationResult:
     【フィールド説明】
     - player_name: 調査対象のプレイヤー名
     - attribute_matrix: 属性名 → True/False/None (○/×/?) のマッピング
-    - confidence: 信頼度 (0.0-1.0)
     - source_urls: 情報源URL
     - investigation_date: 調査実行日時
     - needs_verification: 手動確認が必要かどうか
@@ -313,7 +298,6 @@ class AttributeInvestigationResult:
     """
     player_name: str
     attribute_matrix: dict[str, Optional[bool]]  # 属性名 → ○(True)/×(False)/?(None)
-    confidence: float
     source_urls: list[str] = field(default_factory=list)
     investigation_date: datetime = field(default_factory=datetime.now)
     needs_verification: bool = False
@@ -324,14 +308,12 @@ class AttributeInvestigationResult:
         cls,
         player_name: str,
         attribute_matrix: dict[str, Optional[bool]],
-        confidence: float = 0.9,
         source_urls: Optional[list[str]] = None,
     ) -> "AttributeInvestigationResult":
         """成功した調査結果を作成"""
         return cls(
             player_name=player_name,
             attribute_matrix=attribute_matrix,
-            confidence=confidence,
             source_urls=source_urls or [],
             investigation_date=datetime.now(),
             needs_verification=False,
@@ -349,7 +331,6 @@ class AttributeInvestigationResult:
         return cls(
             player_name=player_name,
             attribute_matrix=attribute_matrix or {},
-            confidence=0.3,
             source_urls=[],
             investigation_date=datetime.now(),
             needs_verification=True,
@@ -366,7 +347,6 @@ class AttributeInvestigationResult:
         return cls(
             player_name=player_name,
             attribute_matrix={},
-            confidence=0.0,
             source_urls=[],
             investigation_date=datetime.now(),
             needs_verification=True,
@@ -378,7 +358,6 @@ class AttributeInvestigationResult:
         return {
             "player_name": self.player_name,
             "attribute_matrix": self.attribute_matrix,
-            "confidence": self.confidence,
             "source_urls": self.source_urls,
             "investigation_date": self.investigation_date.isoformat() if self.investigation_date else "",
             "needs_verification": self.needs_verification,
@@ -395,7 +374,6 @@ class NewcomerCandidate:
     - official_url: 公式サイトURL
     - company_name: 運営会社名
     - entry_date_approx: 推定参入時期（"2025-06" 等）
-    - confidence: 信頼度 (0.0-1.0)
     - source_urls: 情報源URL
     - reason: 新規参入と判断した理由
     - verification_status: 検証ステータス ("verified"/"unverified"/"url_error")
@@ -405,7 +383,6 @@ class NewcomerCandidate:
     official_url: str = ""
     company_name: str = ""
     entry_date_approx: str = ""
-    confidence: float = 0.0
     source_urls: list[str] = field(default_factory=list)
     reason: str = ""
     verification_status: str = "unverified"  # "verified" / "unverified" / "url_error"
@@ -418,7 +395,6 @@ class NewcomerCandidate:
             "official_url": self.official_url,
             "company_name": self.company_name,
             "entry_date_approx": self.entry_date_approx,
-            "confidence": self.confidence,
             "source_urls": self.source_urls,
             "reason": self.reason,
             "verification_status": self.verification_status,

@@ -33,7 +33,6 @@ class TestPlayerValidator:
 
         assert result.alert_level == AlertLevel.OK
         assert result.change_type == ChangeType.NO_CHANGE
-        assert result.confidence >= 0.9
         assert not result.needs_manual_review
 
     @pytest.mark.asyncio
@@ -94,7 +93,6 @@ class TestPlayerValidator:
         )
 
         assert result.needs_manual_review
-        assert result.confidence < validator.CONFIDENCE_THRESHOLD
 
     @pytest.mark.asyncio
     async def test_validate_batch(self, mock_llm_client, sample_player_data):

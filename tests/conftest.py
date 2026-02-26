@@ -191,7 +191,6 @@ def sample_store_investigation_results():
         StoreInvestigationResult(
             company_name="テスト株式会社A",
             total_stores=100,
-            confidence=0.9,
             source_urls=["https://test-a.example.com/stores/"],
             investigation_date=datetime.now(),
             investigation_mode="ai",
@@ -204,7 +203,6 @@ def sample_store_investigation_results():
         StoreInvestigationResult(
             company_name="テスト株式会社B",
             total_stores=50,
-            confidence=0.5,
             source_urls=["https://test-b.example.com/"],
             investigation_date=datetime.now(),
             investigation_mode="ai",

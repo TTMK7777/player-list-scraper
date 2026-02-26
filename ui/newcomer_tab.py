@@ -21,10 +21,12 @@ from investigators.newcomer_detector import NewcomerDetector
 from ui.common import display_verification_badge
 
 
-def render_newcomer_tab(industry: str):
+def render_newcomer_tab():
     """新規参入検出タブのUIをレンダリング"""
 
     st.subheader("新規参入プレイヤー検出")
+
+    st.info("既存プレイヤーリストにない**新規参入企業**をAIが自動検索します。ファイルアップロードまたは直接入力で既存リストを登録後、検索を実行してください。")
 
     # 既存プレイヤーリスト入力
     st.markdown("**既存プレイヤーリストを入力**")
@@ -51,6 +53,7 @@ def render_newcomer_tab(industry: str):
 
                 existing_names = [p.player_name for p in players_data]
                 st.session_state.existing_players = existing_names
+                st.session_state.newcomer_uploaded_filename = uploaded_file.name
                 st.success(f"{len(existing_names)}件の既存プレイヤーを読み込みました")
 
             except Exception as e:
@@ -79,6 +82,25 @@ def render_newcomer_tab(industry: str):
 
     st.divider()
 
+    # 業界（ファイル名から自動推測）
+    st.markdown("**対象業界**")
+    auto_industry = ""
+    filename = st.session_state.get("newcomer_uploaded_filename", "")
+    if filename:
+        # ファイル名から業界を推測（例: "動画配信プレイヤーリスト.xlsx" → "動画配信サービス"）
+        stem = Path(filename).stem
+        # 不要語を除去してそのまま使う（LLMが文脈として理解できる）
+        for noise in ["プレイヤーリスト", "一覧", "リスト", "調査", "用"]:
+            stem = stem.replace(noise, "").strip()
+        auto_industry = stem
+    industry = st.text_input(
+        "業界名",
+        value=auto_industry,
+        placeholder="例: 動画配信サービス、クレジットカード",
+        help="ファイル名から自動推測します。必要に応じて修正してください。",
+        key="newcomer_industry_input",
+    )
+
     # 検出実行
     run_button = st.button(
         "新規参入を検索",
@@ -89,7 +111,7 @@ def render_newcomer_tab(industry: str):
     )
 
     if not industry:
-        st.warning("サイドバーで業界を選択してください。")
+        st.warning("業界を入力してください。")
 
     st.divider()
 
@@ -144,7 +166,7 @@ def render_newcomer_tab(industry: str):
             badge = display_verification_badge(candidate.verification_status)
 
             with st.container():
-                col1, col2, col3, col4 = st.columns([0.5, 3, 2, 1.5])
+                col1, col2, col3 = st.columns([0.5, 3, 3])
 
                 with col1:
                     # チェックボックス（選択用）
@@ -161,9 +183,6 @@ def render_newcomer_tab(industry: str):
                 with col3:
                     st.caption(f"運営: {candidate.company_name}" if candidate.company_name else "")
                     st.caption(f"理由: {candidate.reason}" if candidate.reason else "")
-
-                with col4:
-                    st.metric("信頼度", f"{candidate.confidence * 100:.0f}%")
 
             st.divider()
 

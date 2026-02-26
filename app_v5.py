@@ -200,47 +200,15 @@ def main():
 
         st.divider()
 
-        # 業界選択
+        # 業界設定（validation/attribute/workflow で使用）
         st.subheader("📋 業界設定")
-        industry = st.selectbox(
+        industry = st.text_input(
             "対象業界",
-            [
-                "",
-                "クレジットカード",
-                "動画配信サービス",
-                "中古車販売店",
-                "学習塾・予備校",
-                "フィットネスクラブ",
-                "飲食店",
-                "小売店",
-                "その他",
-            ],
-            format_func=lambda x: "選択してください" if x == "" else x,
+            placeholder="例: クレジットカード、動画配信サービス",
+            help="正誤チェック・汎用調査・3段階チェックで使用します",
         )
 
-        if industry == "その他":
-            industry = st.text_input("業界名を入力", placeholder="例: 美容室")
-
         st.divider()
-
-        # 使い方
-        st.subheader("📖 使い方")
-        st.markdown("""
-        **正誤チェック**
-        1. Excelアップロード → 「正誤チェック開始」
-
-        **店舗調査**
-        1. 調査モード選択 → 企業入力 → 「店舗調査開始」
-
-        **汎用調査**
-        1. テンプレート選択 → Excel入力 → 「調査開始」
-
-        **新規参入検出**
-        1. 既存リスト入力 → 「新規参入を検索」
-
-        **3段階チェック**
-        1. フェーズ選択 → Excel入力 → フェーズ実行
-        """)
 
     # ====================================
     # メインエリア: 機能選択
@@ -268,13 +236,13 @@ def main():
     if "汎用調査" in function_type:
         render_investigation_tab(industry=industry)
     elif "新規参入検出" in function_type:
-        render_newcomer_tab(industry=industry)
+        render_newcomer_tab()
     elif "3段階チェック" in function_type:
         render_workflow_tab(industry=industry)
     elif "正誤チェック" in function_type:
         render_validation_tab(industry=industry)
     elif "店舗調査" in function_type:
-        render_store_tab(industry=industry)
+        render_store_tab()
 
 
 if __name__ == "__main__":

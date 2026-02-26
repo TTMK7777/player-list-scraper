@@ -65,7 +65,7 @@ class PlayerValidator:
     5. 統合・買収などの重大ニュースはあるか
     """
 
-    # 信頼度の閾値
+    # LLMレスポンスの信頼度閾値（needs_manual_review 判定用）
     CONFIDENCE_THRESHOLD = 0.6  # これ以下は「要確認」
 
     def __init__(
@@ -354,7 +354,6 @@ class PlayerValidator:
             url_current=current_url,
             company_name_original=original_company,
             company_name_current=data.get("current_company_name", original_company) or original_company,
-            confidence=confidence,
             source_urls=sources,
             news_summary=news,
             checked_at=datetime.now(),

@@ -141,7 +141,6 @@ class TestValidationReportExporter:
                 change_type=ChangeType.NO_CHANGE,
                 url_original="https://example.com",
                 url_current="https://example.com",
-                confidence=0.95,
                 checked_at=datetime.now(),
             )
         ]
@@ -169,7 +168,6 @@ class TestValidationReportExporter:
                 change_details=["2025年3月にサービス終了"],
                 url_original="https://example.com",
                 url_current="",
-                confidence=0.9,
                 needs_manual_review=False,
                 checked_at=datetime.now(),
             )

@@ -150,7 +150,6 @@ def _display_table(results: list[ValidationResult]) -> None:
             "プレイヤー名（現在）": result.player_name_current,
             "変更タイプ": result.change_type.value,
             "変更内容": " / ".join(result.change_details) if result.change_details else "-",
-            "信頼度": f"{result.confidence * 100:.0f}%",
             "要確認": "⚠️" if result.needs_manual_review else "",
         })
 
@@ -166,7 +165,6 @@ def _display_table(results: list[ValidationResult]) -> None:
             "プレイヤー名（現在）": st.column_config.TextColumn("プレイヤー名（現在）", width="medium"),
             "変更タイプ": st.column_config.TextColumn("変更タイプ", width="small"),
             "変更内容": st.column_config.TextColumn("変更内容", width="large"),
-            "信頼度": st.column_config.TextColumn("信頼度", width="small"),
             "要確認": st.column_config.TextColumn("要確認", width="small"),
         },
     )
@@ -187,7 +185,6 @@ def _export_results(results: list[ValidationResult]) -> bytes:
             "公式URL（現在）": result.url_current,
             "運営会社（元）": result.company_name_original,
             "運営会社（現在）": result.company_name_current,
-            "信頼度": f"{result.confidence * 100:.0f}%",
             "要確認フラグ": "TRUE" if result.needs_manual_review else "FALSE",
             "関連ニュース": result.news_summary,
             "情報ソース": "\n".join(result.source_urls) if result.source_urls else "",
@@ -228,6 +225,8 @@ def render_validation_tab(industry: str):
         st.session_state.val_is_running = False
 
     st.subheader("📂 Excelアップロード")
+
+    st.info("既存プレイヤーリストの**撤退・統合・名称変更**をGemini AIが自動検出します。アラートレベル別にExcelレポートを出力できます。")
 
     uploaded_file = st.file_uploader(
         "プレイヤーリストExcelをアップロード",

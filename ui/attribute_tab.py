@@ -478,8 +478,7 @@ def _render_results_section(attributes: list[str]) -> None:
                 row[attr] = "×"
             else:
                 row[attr] = "?"
-        row["信頼度"] = f"{r.confidence * 100:.0f}%"
-        row["要確認"] = "!" if r.needs_verification else ""
+        row["要確認"] = "⚠️" if r.needs_verification else ""
         matrix_data.append(row)
 
     df = pd.DataFrame(matrix_data)
@@ -536,6 +535,8 @@ def render_investigation_tab(industry: str) -> None:
         industry: 対象業界名。
     """
     st.subheader("📊 汎用調査")
+
+    st.info("プレイヤーの**属性（○/×）**をAIが一括調査します。テンプレートを選択するか、カスタムで属性を定義してください。")
 
     # セッション状態初期化
     if "attr_players" not in st.session_state:

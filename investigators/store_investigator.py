@@ -196,7 +196,7 @@ class StoreInvestigator:
 
             # レスポンス解析
             result = self._parse_ai_response(company_name, response)
-            log(f"調査完了: {result.total_stores}店舗, 信頼度{result.confidence*100:.0f}%")
+            log(f"調査完了: {result.total_stores}店舗")
 
             return result
 
@@ -363,7 +363,6 @@ class StoreInvestigator:
         return StoreInvestigationResult(
             company_name=company_name,
             total_stores=total_stores,
-            confidence=confidence,
             source_urls=sources,
             investigation_date=datetime.now(),
             investigation_mode="ai",
@@ -419,7 +418,6 @@ class StoreInvestigator:
                     if store.url and store.url not in source_urls:
                         source_urls.append(store.url)
 
-            confidence = 0.9 if total_stores > 10 else 0.7 if total_stores > 0 else 0.3
             notes = f"戦略: {result.strategy_used}, 処理時間: {result.elapsed_time:.1f}秒"
 
             log(f"スクレイピング完了: {total_stores}店舗")
@@ -427,7 +425,6 @@ class StoreInvestigator:
             return StoreInvestigationResult(
                 company_name=company_name,
                 total_stores=total_stores,
-                confidence=confidence,
                 source_urls=source_urls,
                 investigation_date=datetime.now(),
                 investigation_mode="scraping",
@@ -459,13 +456,12 @@ class StoreInvestigator:
             company_name, official_url, industry, log
         )
 
-        # Step 2: 信頼度チェック
-        if ai_result.confidence >= self.CONFIDENCE_THRESHOLD:
-            log(f"AI調査の信頼度が十分です（{ai_result.confidence*100:.0f}%）")
+        # Step 2: needs_verification チェック
+        if not ai_result.needs_verification:
+            log("AI調査の結果が十分です")
             ai_result = StoreInvestigationResult(
                 company_name=ai_result.company_name,
                 total_stores=ai_result.total_stores,
-                confidence=ai_result.confidence,
                 source_urls=ai_result.source_urls,
                 investigation_date=ai_result.investigation_date,
                 investigation_mode="hybrid",  # モードを更新
@@ -480,7 +476,7 @@ class StoreInvestigator:
 
         # Step 3: スクレイピング補完
         if official_url:
-            log(f"AI調査の信頼度が低いためスクレイピングで補完（{ai_result.confidence*100:.0f}%）...")
+            log("AI調査が要確認のためスクレイピングで補完...")
 
             scraping_result = await self._investigate_scraping(
                 company_name, official_url, log
@@ -496,7 +492,6 @@ class StoreInvestigator:
                 return StoreInvestigationResult(
                     company_name=company_name,
                     total_stores=scraping_result.total_stores,
-                    confidence=max(ai_result.confidence, scraping_result.confidence),
                     source_urls=merged_sources,
                     investigation_date=datetime.now(),
                     investigation_mode="hybrid",
@@ -513,7 +508,6 @@ class StoreInvestigator:
         return StoreInvestigationResult(
             company_name=company_name,
             total_stores=ai_result.total_stores,
-            confidence=ai_result.confidence,
             source_urls=ai_result.source_urls,
             investigation_date=datetime.now(),
             investigation_mode="hybrid",

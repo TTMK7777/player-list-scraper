@@ -20,7 +20,7 @@ from core.excel_handler import ExcelHandler, StoreInvestigationExporter
 from core.llm_client import LLMClient
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
-from ui.common import display_progress_log, display_filter_multiselect
+from ui.common import display_progress_log
 
 
 # ====================================
@@ -69,28 +69,19 @@ def _display_summary(results: list[StoreInvestigationResult]):
     """店舗調査結果サマリーを表示"""
 
     total_stores = sum((r.total_stores or 0) for r in results)
-    high_conf = sum(1 for r in results if (r.confidence or 0) >= 0.8)
-    medium_conf = sum(1 for r in results if 0.5 <= (r.confidence or 0) < 0.8)
-    low_conf = sum(1 for r in results if (r.confidence or 0) < 0.5)
     need_verify = sum(1 for r in results if r.needs_verification)
 
     st.markdown("### 📊 店舗調査結果サマリー")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("総店舗数", f"{total_stores:,}店舗")
+        st.metric("調査企業数", f"{len(results)}件")
 
     with col2:
-        st.metric("🟢 高信頼度", f"{high_conf}件")
+        st.metric("総店舗数", f"{total_stores:,}店舗")
 
     with col3:
-        st.metric("🟡 中信頼度", f"{medium_conf}件")
-
-    with col4:
-        st.metric("🔴 低信頼度", f"{low_conf}件")
-
-    with col5:
         st.metric("⚠️ 要確認", f"{need_verify}件")
 
 
@@ -101,38 +92,16 @@ def _display_table(results: list[StoreInvestigationResult]) -> None:
         results: 店舗調査結果のリスト。
     """
     # --- フィルター ---
-    confidence_options = ["高信頼度 (80%以上)", "中信頼度 (50-79%)", "低信頼度 (50%未満)"]
-    col_filter1, col_filter2 = st.columns(2)
-
-    with col_filter1:
-        selected_confidence = display_filter_multiselect(
-            "信頼度で絞り込み",
-            options=confidence_options,
-            key="store_filter_confidence",
-        )
-
-    with col_filter2:
-        show_verify_only = st.checkbox(
-            "要確認のみ表示",
-            value=False,
-            key="store_filter_verify",
-        )
+    show_verify_only = st.checkbox(
+        "要確認のみ表示",
+        value=False,
+        key="store_filter_verify",
+    )
 
     # --- フィルター適用 ---
-    def _confidence_matches(conf: float) -> bool:
-        """信頼度がフィルター条件に合致するか判定する。"""
-        if conf >= 0.8 and "高信頼度 (80%以上)" in selected_confidence:
-            return True
-        if 0.5 <= conf < 0.8 and "中信頼度 (50-79%)" in selected_confidence:
-            return True
-        if conf < 0.5 and "低信頼度 (50%未満)" in selected_confidence:
-            return True
-        return False
-
     filtered_results = [
         r for r in results
-        if _confidence_matches(r.confidence or 0)
-        and (not show_verify_only or r.needs_verification)
+        if not show_verify_only or r.needs_verification
     ]
 
     st.caption(f"表示中: {len(filtered_results)} / {len(results)} 件")
@@ -140,7 +109,7 @@ def _display_table(results: list[StoreInvestigationResult]) -> None:
     # --- ソート & テーブル表示 ---
     sorted_results = sorted(
         filtered_results,
-        key=lambda r: (r.needs_verification, -(r.confidence or 0)),
+        key=lambda r: (r.needs_verification, r.company_name),
     )
 
     data = []
@@ -151,7 +120,6 @@ def _display_table(results: list[StoreInvestigationResult]) -> None:
             "直営店": result.direct_stores if result.direct_stores is not None else "-",
             "FC店": result.franchise_stores if result.franchise_stores is not None else "-",
             "調査モード": result.investigation_mode,
-            "信頼度": f"{(result.confidence or 0) * 100:.0f}%",
             "要確認": "⚠️" if result.needs_verification else "",
             "ソースURL": ", ".join(result.source_urls[:2]) if result.source_urls else "-",
         })
@@ -168,7 +136,6 @@ def _display_table(results: list[StoreInvestigationResult]) -> None:
             "直営店": st.column_config.TextColumn("直営店", width="small"),
             "FC店": st.column_config.TextColumn("FC店", width="small"),
             "調査モード": st.column_config.TextColumn("調査モード", width="small"),
-            "信頼度": st.column_config.TextColumn("信頼度", width="small"),
             "要確認": st.column_config.TextColumn("要確認", width="small"),
             "ソースURL": st.column_config.TextColumn("ソースURL", width="large"),
         },
@@ -210,7 +177,6 @@ def _display_scraping_warning():
 def _display_company_detail(result: StoreInvestigationResult):
     """企業別詳細を表示"""
     stores_display = result.total_stores or 0
-    conf_display = (result.confidence or 0) * 100
     with st.expander(f"{'⚠️' if result.needs_verification else '✅'} {result.company_name} - {stores_display}店舗"):
         col1, col2 = st.columns(2)
 
@@ -222,7 +188,6 @@ def _display_company_detail(result: StoreInvestigationResult):
             if result.franchise_stores is not None:
                 st.write(f"- FC店: {result.franchise_stores}")
             st.write(f"- 調査モード: {result.investigation_mode}")
-            st.write(f"- 信頼度: {conf_display:.0f}%")
 
         with col2:
             st.write("**情報ソース**")
@@ -248,8 +213,10 @@ def _display_company_detail(result: StoreInvestigationResult):
 # ====================================
 # メインレンダリング
 # ====================================
-def render_store_tab(industry: str):
+def render_store_tab():
     """店舗調査タブのUIをレンダリング"""
+
+    st.info("企業の**店舗・教室数**を都道府県別に調査します。AI調査（推奨）またはスクレイピングで取得します。")
 
     # タブ固有のセッション状態初期化
     if "store_companies" not in st.session_state:
@@ -328,7 +295,7 @@ def render_store_tab(industry: str):
                     companies.append({
                         "company_name": p.company_name or p.player_name,
                         "official_url": p.official_url,
-                        "industry": industry,
+                        "industry": "",
                     })
 
                 st.session_state.store_companies = companies

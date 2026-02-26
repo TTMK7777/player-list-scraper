@@ -110,13 +110,11 @@ class TestAttributeInvestigationResult:
         result = AttributeInvestigationResult.create_success(
             player_name="Netflix",
             attribute_matrix={"邦画": True, "洋画": True, "アニメ": False},
-            confidence=0.9,
             source_urls=["https://example.com"],
         )
         assert result.player_name == "Netflix"
         assert result.attribute_matrix["邦画"] is True
         assert result.attribute_matrix["アニメ"] is False
-        assert result.confidence == 0.9
         assert not result.needs_verification
 
     def test_create_uncertain(self):
@@ -126,7 +124,6 @@ class TestAttributeInvestigationResult:
             reason="情報不足",
         )
         assert result.needs_verification is True
-        assert result.confidence == 0.3
         assert result.attribute_matrix == {}
 
     def test_create_error(self):
@@ -135,7 +132,6 @@ class TestAttributeInvestigationResult:
             player_name="Netflix",
             error_message="API timeout",
         )
-        assert result.confidence == 0.0
         assert result.needs_verification is True
         assert "エラー" in result.raw_response
 
@@ -144,12 +140,10 @@ class TestAttributeInvestigationResult:
         result = AttributeInvestigationResult.create_success(
             player_name="Netflix",
             attribute_matrix={"邦画": True},
-            confidence=0.9,
         )
         d = result.to_dict()
         assert d["player_name"] == "Netflix"
         assert d["attribute_matrix"] == {"邦画": True}
-        assert d["confidence"] == 0.9
 
 
 # ====================================
@@ -275,7 +269,6 @@ class TestBatchResponseParsing:
         assert results[0].player_name == "Netflix"
         assert results[0].attribute_matrix["邦画"] is True
         assert results[0].attribute_matrix["バラエティ"] is False
-        assert results[0].confidence == 0.9
 
     def test_parse_invalid_json(self, sample_players, sample_attributes):
         """JSON解析失敗時は全プレイヤーが要確認"""
@@ -410,7 +403,6 @@ class TestInvestigateBatch:
         )
         assert len(results) == 3
         assert all(r.needs_verification for r in results)
-        assert all(r.confidence == 0.0 for r in results)
 
 
 # ====================================
@@ -463,13 +455,11 @@ class TestAttributeInvestigationExporter:
             AttributeInvestigationResult.create_success(
                 player_name="Netflix",
                 attribute_matrix={a: True for a in sample_attributes},
-                confidence=0.9,
                 source_urls=["https://example.com"],
             ),
             AttributeInvestigationResult.create_success(
                 player_name="Hulu",
                 attribute_matrix={a: False for a in sample_attributes},
-                confidence=0.8,
             ),
         ]
 
@@ -488,7 +478,6 @@ class TestAttributeInvestigationExporter:
         assert columns[0] == "プレイヤー名"
         for attr in sample_attributes:
             assert attr in columns
-        assert "信頼度" in columns
         assert "ソースURL" in columns
 
     def test_export_with_mixed_values(self, tmp_path, sample_attributes):
@@ -506,7 +495,6 @@ class TestAttributeInvestigationExporter:
             AttributeInvestigationResult.create_success(
                 player_name="テストサービス",
                 attribute_matrix=matrix,
-                confidence=0.7,
             ),
         ]
 

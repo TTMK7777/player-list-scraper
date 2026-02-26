@@ -33,7 +33,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import AttributeInvestigationResult
 from core.sanitizer import sanitize_input
-from core.safe_parse import safe_float
 from core.attribute_presets import ATTRIBUTE_PRESETS
 
 
@@ -365,7 +364,6 @@ class AttributeInvestigator:
                 else:
                     attribute_matrix[attr] = None  # null/不明
 
-            confidence = safe_float(item.get("confidence"), default=0.5)
             sources = item.get("sources", [])
             if isinstance(sources, str):
                 sources = [sources]
@@ -374,7 +372,6 @@ class AttributeInvestigator:
                 AttributeInvestigationResult.create_success(
                     player_name=player_name,
                     attribute_matrix=attribute_matrix,
-                    confidence=confidence,
                     source_urls=sources,
                 )
             )

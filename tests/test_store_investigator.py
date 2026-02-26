@@ -128,14 +128,12 @@ class TestStoreInvestigationResult:
             total_stores=100,
             source_urls=["https://example.com/"],
             investigation_mode="ai",
-            confidence=0.9,
             direct_stores=80,
             franchise_stores=20,
         )
 
         assert result.company_name == "テスト株式会社"
         assert result.total_stores == 100
-        assert result.confidence == 0.9
         assert result.investigation_mode == "ai"
         assert result.direct_stores == 80
         assert result.franchise_stores == 20
@@ -152,7 +150,6 @@ class TestStoreInvestigationResult:
 
         assert result.company_name == "テスト株式会社"
         assert result.total_stores == 0
-        assert result.confidence == 0.3
         assert result.needs_verification is True
         assert "要確認" in result.notes
 
@@ -166,7 +163,6 @@ class TestStoreInvestigationResult:
 
         assert result.company_name == "テスト株式会社"
         assert result.total_stores == 0
-        assert result.confidence == 0.0
         assert result.needs_verification is True
         assert "エラー" in result.notes
 
@@ -250,7 +246,6 @@ class TestStoreInvestigator:
         assert result.total_stores == 150
         assert result.direct_stores == 120
         assert result.franchise_stores == 30
-        assert result.confidence == 0.85
         assert result.investigation_mode == "ai"
         assert len(result.source_urls) == 2
         assert result.prefecture_distribution is not None
@@ -268,7 +263,6 @@ class TestStoreInvestigator:
         )
 
         assert result.total_stores == 50
-        assert result.confidence == 0.4
         assert result.needs_verification is True  # 信頼度が閾値以下
 
     @pytest.mark.asyncio
@@ -282,7 +276,6 @@ class TestStoreInvestigator:
         )
 
         assert result.total_stores == 0
-        assert result.confidence == 0.0
         assert result.needs_verification is True
         assert "エラー" in result.notes
 
@@ -334,7 +327,6 @@ class TestStoreInvestigator:
 
         # AI調査の信頼度が高いのでスクレイピングは実行されない
         assert result.total_stores == 150
-        assert result.confidence == 0.85
         assert result.investigation_mode == "hybrid"
 
     @pytest.mark.asyncio
@@ -421,7 +413,6 @@ class TestStoreInvestigator:
         result = investigator._parse_ai_response("テスト株式会社", response)
 
         assert result.total_stores == 100
-        assert result.confidence == 0.9
         assert len(result.source_urls) == 1
 
     def test_parse_ai_response_invalid_json(self, mock_llm_client_success):

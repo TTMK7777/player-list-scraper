@@ -33,6 +33,8 @@ def render_workflow_tab(industry: str):
 
     st.subheader("3段階チェック体制")
 
+    st.info("**実査前・ランキング確定時・発表前**の3フェーズで段階的にプレイヤーリストをチェックします。")
+
     if not industry:
         st.warning("サイドバーで業界を選択してください。")
         return
