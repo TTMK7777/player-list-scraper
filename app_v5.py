@@ -136,6 +136,13 @@ def init_apis() -> bool:
     from dotenv import load_dotenv
     load_dotenv(Path.home() / ".env.local", override=True)
 
+    # Streamlit Cloud: st.secrets → os.environ に注入
+    try:
+        if "GOOGLE_API_KEY" in st.secrets:
+            os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+    except Exception:
+        pass  # ローカル環境では st.secrets が存在しないため無視
+
     return is_api_available()
 
 
@@ -160,7 +167,7 @@ def main():
             st.success("✅ Gemini: 接続OK")
         else:
             st.error("❌ GOOGLE_API_KEY が設定されていません")
-            st.info("~/.env.local に GOOGLE_API_KEY を設定してください")
+            st.info("~/.env.local またはStreamlit Cloud の Secrets に GOOGLE_API_KEY を設定してください")
             st.stop()
 
         st.divider()

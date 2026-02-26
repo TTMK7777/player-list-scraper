@@ -61,6 +61,11 @@ credentials.json
 secrets.json
 *.pem
 *.key
+.env.local
+.env.*
+
+# Streamlit local secrets (never commit)
+.streamlit/secrets.toml
 
 # OS
 .DS_Store
