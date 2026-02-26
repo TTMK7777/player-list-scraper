@@ -34,7 +34,7 @@
 
 ## クイックスタート
 
-### 1. 環境設定
+### ローカル実行
 
 ```bash
 # 依存パッケージインストール
@@ -42,17 +42,21 @@ pip install -r requirements.txt
 
 # APIキーを設定（~/.env.local）
 echo "GOOGLE_API_KEY=AIzaSy-xxxxx" >> ~/.env.local
-```
 
-### 2. 起動
-
-```bash
-# 推奨: 統合GUI（全5機能搭載）
+# 起動
 streamlit run app_v5.py
-
-# バッチファイルで起動
-start.bat
 ```
+
+### Streamlit Cloud（デプロイ済み）
+
+Settings → Secrets に以下を設定:
+
+```toml
+GOOGLE_API_KEY = "AIzaSy-xxxxx"
+APP_PASSWORD   = "チームで決めたパスワード"
+```
+
+アクセス時はパスワード入力画面が表示されます。
 
 | ファイル | 説明 |
 |----------|------|

@@ -89,22 +89,25 @@ class ExcelHandler:
             raise FileNotFoundError(f"ファイルが見つかりません: {file_path}")
 
         self.workbook = openpyxl.load_workbook(file_path, data_only=True)
-        self.sheet = self.workbook.active
+        try:
+            self.sheet = self.workbook.active
 
-        # ヘッダー行を探す
-        self._find_header_row()
+            # ヘッダー行を探す
+            self._find_header_row()
 
-        # 列マッピングを作成
-        self._create_column_map()
+            # 列マッピングを作成
+            self._create_column_map()
 
-        # データを読み込み
-        players = []
-        for row_idx in range(self.header_row + 1, self.sheet.max_row + 1):
-            player = self._read_row(row_idx)
-            if player and player.player_name.strip():
-                players.append(player)
+            # データを読み込み
+            players = []
+            for row_idx in range(self.header_row + 1, self.sheet.max_row + 1):
+                player = self._read_row(row_idx)
+                if player and player.player_name.strip():
+                    players.append(player)
 
-        return players
+            return players
+        finally:
+            self.workbook.close()
 
     def _find_header_row(self) -> None:
         """ヘッダー行を探す（キーワードマッチングで検出）"""

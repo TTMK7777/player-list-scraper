@@ -85,23 +85,19 @@ def _sanitize_template_id(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# メインレンダー関数
+# サブセクション関数
 # ---------------------------------------------------------------------------
-def render_investigation_tab(industry: str) -> None:
-    """汎用調査タブのUIをレンダリング。
-
-    テンプレート選択/管理 + プレイヤー入力 + 調査実行 + 結果表示の
-    4セクション構成。
+def _render_template_section(
+    tm: TemplateManager,
+) -> tuple[list[str], Optional[int], str]:
+    """テンプレート選択・作成・削除セクションをレンダリング。
 
     Args:
-        industry: 対象業界名。
-    """
-    st.subheader("📊 汎用調査")
+        tm: テンプレートマネージャーインスタンス。
 
-    # ------------------------------------------------------------------
-    # セクション1: テンプレート選択・管理
-    # ------------------------------------------------------------------
-    tm = TemplateManager()
+    Returns:
+        (attributes, batch_size, context) のタプル。
+    """
     templates = tm.list_templates()
 
     options = _build_template_options(templates)
@@ -276,9 +272,14 @@ def render_investigation_tab(industry: str) -> None:
 
     st.divider()
 
-    # ------------------------------------------------------------------
-    # セクション2: プレイヤー情報入力
-    # ------------------------------------------------------------------
+    return attributes, batch_size, context
+
+
+def _render_player_input_section() -> None:
+    """プレイヤー情報入力セクション（Excel/直接入力）をレンダリング。
+
+    入力結果は ``st.session_state.attr_players`` に格納される。
+    """
     st.subheader("📂 プレイヤー情報入力")
 
     input_tab1, input_tab2 = st.tabs(["📤 Excelアップロード", "✏️ 直接入力"])
@@ -343,17 +344,21 @@ def render_investigation_tab(industry: str) -> None:
 
     st.divider()
 
-    # ------------------------------------------------------------------
-    # セッション状態初期化
-    # ------------------------------------------------------------------
-    if "attr_players" not in st.session_state:
-        st.session_state.attr_players = []
-    if "attr_results" not in st.session_state:
-        st.session_state.attr_results = []
 
-    # ------------------------------------------------------------------
-    # セクション3: コスト概算 & 調査実行
-    # ------------------------------------------------------------------
+def _render_investigation_section(
+    industry: str,
+    attributes: list[str],
+    batch_size: Optional[int],
+    context: str,
+) -> None:
+    """コスト概算・調査実行・進捗表示セクションをレンダリング。
+
+    Args:
+        industry: 対象業界名。
+        attributes: 調査対象属性リスト。
+        batch_size: テンプレート推奨バッチサイズ（None で自動）。
+        context: LLM 判定基準テキスト。
+    """
     players = st.session_state.attr_players
 
     if players and attributes:
@@ -447,68 +452,109 @@ def render_investigation_tab(industry: str) -> None:
 
         st.session_state.is_running = False
 
-    # ------------------------------------------------------------------
-    # セクション4: 結果表示 + エクスポート
-    # ------------------------------------------------------------------
-    if st.session_state.attr_results:
-        results = st.session_state.attr_results
 
-        # マトリクステーブル表示
-        st.subheader("結果: 属性マトリクス")
+def _render_results_section(attributes: list[str]) -> None:
+    """調査結果表示・エクスポートセクションをレンダリング。
 
-        matrix_data = []
+    Args:
+        attributes: 調査対象属性リスト（列ヘッダ用）。
+    """
+    if not st.session_state.attr_results:
+        return
+
+    results = st.session_state.attr_results
+
+    # マトリクステーブル表示
+    st.subheader("結果: 属性マトリクス")
+
+    matrix_data = []
+    for r in results:
+        row = {"プレイヤー名": r.player_name}
+        for attr in attributes:
+            val = (r.attribute_matrix or {}).get(attr)
+            if val is True:
+                row[attr] = "○"
+            elif val is False:
+                row[attr] = "×"
+            else:
+                row[attr] = "?"
+        row["信頼度"] = f"{r.confidence * 100:.0f}%"
+        row["要確認"] = "!" if r.needs_verification else ""
+        matrix_data.append(row)
+
+    df = pd.DataFrame(matrix_data)
+    st.dataframe(df, use_container_width=True, height=400)
+
+    st.divider()
+
+    # エクスポート
+    st.subheader("結果エクスポート")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        exporter = AttributeInvestigationExporter(attributes=attributes)
+        excel_data = export_to_excel_bytes(exporter, results)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            "Excel ダウンロード（調査結果）",
+            excel_data,
+            f"investigation_{timestamp}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="inv_excel_download",
+        )
+
+    with col2:
+        csv_data = []
         for r in results:
-            row = {"プレイヤー名": r.player_name}
-            for attr in attributes:
-                val = (r.attribute_matrix or {}).get(attr)
-                if val is True:
-                    row[attr] = "○"
-                elif val is False:
-                    row[attr] = "×"
-                else:
-                    row[attr] = "?"
-            row["信頼度"] = f"{r.confidence * 100:.0f}%"
-            row["要確認"] = "!" if r.needs_verification else ""
-            matrix_data.append(row)
+            csv_data.append(r.to_dict())
+        df_csv = pd.DataFrame(csv_data)
+        csv_bytes = df_csv.to_csv(index=False).encode("utf-8-sig")
 
-        df = pd.DataFrame(matrix_data)
-        st.dataframe(df, use_container_width=True, height=400)
+        st.download_button(
+            "CSV ダウンロード",
+            csv_bytes,
+            f"investigation_{timestamp}.csv",
+            "text/csv",
+            use_container_width=True,
+            key="inv_csv_download",
+        )
 
-        st.divider()
 
-        # エクスポート
-        st.subheader("結果エクスポート")
+# ---------------------------------------------------------------------------
+# メインレンダー関数（オーケストレーター）
+# ---------------------------------------------------------------------------
+def render_investigation_tab(industry: str) -> None:
+    """汎用調査タブのUIをレンダリング。
 
-        col1, col2 = st.columns(2)
+    テンプレート選択/管理 + プレイヤー入力 + 調査実行 + 結果表示の
+    4セクション構成。各セクションはサブ関数に委譲し、本関数は
+    オーケストレーターとして呼び出し順序を制御する。
 
-        with col1:
-            exporter = AttributeInvestigationExporter(attributes=attributes)
-            excel_data = export_to_excel_bytes(exporter, results)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.download_button(
-                "Excel ダウンロード（調査結果）",
-                excel_data,
-                f"investigation_{timestamp}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="inv_excel_download",
-            )
+    Args:
+        industry: 対象業界名。
+    """
+    st.subheader("📊 汎用調査")
 
-        with col2:
-            csv_data = []
-            for r in results:
-                csv_data.append(r.to_dict())
-            df_csv = pd.DataFrame(csv_data)
-            csv_bytes = df_csv.to_csv(index=False).encode("utf-8-sig")
+    # セッション状態初期化
+    if "attr_players" not in st.session_state:
+        st.session_state.attr_players = []
+    if "attr_results" not in st.session_state:
+        st.session_state.attr_results = []
 
-            st.download_button(
-                "CSV ダウンロード",
-                csv_bytes,
-                f"investigation_{timestamp}.csv",
-                "text/csv",
-                use_container_width=True,
-                key="inv_csv_download",
-            )
+    # セクション1: テンプレート選択・管理
+    tm = TemplateManager()
+    attributes, batch_size, context = _render_template_section(tm)
+
+    # セクション2: プレイヤー情報入力
+    _render_player_input_section()
+
+    # セクション3: コスト概算 & 調査実行
+    _render_investigation_section(industry, attributes, batch_size, context)
+
+    # セクション4: 結果表示 + エクスポート
+    _render_results_section(attributes)
 
 
 # ---------------------------------------------------------------------------

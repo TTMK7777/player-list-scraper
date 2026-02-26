@@ -79,6 +79,19 @@ class ScrapingResult:
 
 
 # ====================================
+# 定数
+# ====================================
+REQUEST_TIMEOUT = 30          # requests タイムアウト（秒）
+PLAYWRIGHT_TIMEOUT_MS = 30000  # Playwright タイムアウト（ミリ秒）
+CRAWL_SLEEP_INTERVAL = 0.5    # クロール間スリープ（秒）
+PREF_SLEEP_INTERVAL = 0.3     # 都道府県間スリープ（秒）
+MAX_PAGES_TO_SCRAPE = 10      # 最大スクレイピングページ数
+MAX_BROWSER_PAGES = 15         # ブラウザ最大ページ数
+MAX_PREFECTURES = 47           # 都道府県数
+MAX_HTML_LENGTH = 50000        # HTML最大長
+
+
+# ====================================
 # 共通ユーティリティ
 # ====================================
 HEADERS = {
@@ -201,7 +214,7 @@ def normalize_phone(phone: str) -> str:
     return cleaned
 
 
-def clean_html(html: str, max_length: int = 50000) -> str:
+def clean_html(html: str, max_length: int = MAX_HTML_LENGTH) -> str:
     """HTMLをクリーンアップ"""
     soup = BeautifulSoup(html, "html.parser")
 
@@ -345,7 +358,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
             log(f"候補ページ: {len(store_page_urls)}件")
 
             # Step 3: 各ページから店舗情報を抽出
-            for page_url in store_page_urls[:10]:  # 最大10ページ
+            for page_url in store_page_urls[:MAX_PAGES_TO_SCRAPE]:  # 最大ページ数
                 if page_url in visited and page_url != url:
                     continue
                 visited.add(page_url)
@@ -355,30 +368,16 @@ class StaticHTMLStrategy(ScrapingStrategy):
 
                     if page_url != url:
                         html, soup = await self._fetch_page(page_url)
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(CRAWL_SLEEP_INTERVAL)
 
                     # このページに都道府県別リンクがあれば巡回
                     sub_pref_urls = self._find_prefecture_page_links(soup, page_url)
                     if sub_pref_urls and len(sub_pref_urls) > 5:
                         log(f"都道府県別ページを巡回: {len(sub_pref_urls)}件")
-                        for pref_url in sub_pref_urls:
-                            if pref_url in visited:
-                                continue
-                            visited.add(pref_url)
-
-                            try:
-                                pref_html, _ = await self._fetch_page(pref_url)
-                                await asyncio.sleep(0.3)
-
-                                extracted = await self._extract_stores_with_llm(
-                                    pref_html, company_name, pref_url, llm
-                                )
-                                if extracted:
-                                    log(f"  → {len(extracted)}件抽出")
-                                    stores.extend(extracted)
-                            except (requests.RequestException, ValueError, RuntimeError) as e:
-                                logger.warning("都道府県ページ巡回エラー: %s - %s", pref_url, e)
-                                continue
+                        pref_stores = await self._crawl_prefecture_pages(
+                            sub_pref_urls, visited, company_name, llm, log
+                        )
+                        stores.extend(pref_stores)
                     else:
                         # LLMで店舗情報を抽出
                         extracted = await self._extract_stores_with_llm(
@@ -394,26 +393,12 @@ class StaticHTMLStrategy(ScrapingStrategy):
                     continue
 
             # Step 4: 都道府県別ページを直接巡回（まだ店舗が少ない場合）
-            if len(stores) < 10 and pref_page_urls:
+            if len(stores) < MAX_PAGES_TO_SCRAPE and pref_page_urls:
                 log(f"追加巡回: 都道府県別ページ {len(pref_page_urls)}件")
-                for pref_url in pref_page_urls:
-                    if pref_url in visited:
-                        continue
-                    visited.add(pref_url)
-
-                    try:
-                        pref_html, _ = await self._fetch_page(pref_url)
-                        await asyncio.sleep(0.3)
-
-                        extracted = await self._extract_stores_with_llm(
-                            pref_html, company_name, pref_url, llm
-                        )
-                        if extracted:
-                            log(f"  → {len(extracted)}件抽出")
-                            stores.extend(extracted)
-                    except (requests.RequestException, ValueError, RuntimeError) as e:
-                        logger.warning("追加都道府県巡回エラー: %s - %s", pref_url, e)
-                        continue
+                additional_stores = await self._crawl_prefecture_pages(
+                    pref_page_urls, visited, company_name, llm, log
+                )
+                stores.extend(additional_stores)
 
             # 重複除去
             stores = self._deduplicate(stores)
@@ -425,10 +410,40 @@ class StaticHTMLStrategy(ScrapingStrategy):
 
         return stores
 
+    async def _crawl_prefecture_pages(
+        self,
+        pref_urls: list[str],
+        visited: set[str],
+        company_name: str,
+        llm: LLMClient,
+        log: Callable[[str], None],
+    ) -> list[StoreInfo]:
+        """都道府県別ページを巡回して店舗情報を抽出する共通ヘルパー"""
+        stores: list[StoreInfo] = []
+        for pref_url in pref_urls:
+            if pref_url in visited:
+                continue
+            visited.add(pref_url)
+
+            try:
+                pref_html, _ = await self._fetch_page(pref_url)
+                await asyncio.sleep(PREF_SLEEP_INTERVAL)
+
+                extracted = await self._extract_stores_with_llm(
+                    pref_html, company_name, pref_url, llm
+                )
+                if extracted:
+                    log(f"  → {len(extracted)}件抽出")
+                    stores.extend(extracted)
+            except (requests.RequestException, ValueError, RuntimeError) as e:
+                logger.warning("都道府県ページ巡回エラー: %s - %s", pref_url, e)
+                continue
+        return stores
+
     async def _fetch_page(self, url: str) -> tuple[str, BeautifulSoup]:
         """ページを取得"""
         response = await asyncio.to_thread(
-            requests.get, url, headers=HEADERS, timeout=30
+            requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
         self._count_page_visit()
         response.encoding = response.apparent_encoding
@@ -926,7 +941,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
             try:
                 # Step 1: トップページにアクセス
                 log(f"ページを読み込み中: {url}")
-                await page.goto(url, timeout=30000, wait_until="networkidle")
+                await page.goto(url, timeout=PLAYWRIGHT_TIMEOUT_MS, wait_until="networkidle")
                 self._count_page_visit()
                 await asyncio.sleep(2)
 
@@ -942,7 +957,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
 
                 # Step 3: 各ページを巡回
                 visited = set()
-                for link in store_links[:15]:
+                for link in store_links[:MAX_BROWSER_PAGES]:
                     if link in visited:
                         continue
                     visited.add(link)
@@ -951,7 +966,7 @@ class BrowserAutomationStrategy(ScrapingStrategy):
                         log(f"巡回中: {link[:60]}...")
 
                         if link != url:
-                            await page.goto(link, timeout=30000, wait_until="networkidle")
+                            await page.goto(link, timeout=PLAYWRIGHT_TIMEOUT_MS, wait_until="networkidle")
                             self._count_page_visit()
                             await asyncio.sleep(1)
 
@@ -960,15 +975,15 @@ class BrowserAutomationStrategy(ScrapingStrategy):
 
                         if pref_links:
                             log(f"都道府県別ページ: {len(pref_links)}件")
-                            for pref_link in pref_links[:47]:  # 最大47都道府県
+                            for pref_link in pref_links[:MAX_PREFECTURES]:
                                 if pref_link in visited:
                                     continue
                                 visited.add(pref_link)
 
                                 try:
-                                    await page.goto(pref_link, timeout=30000, wait_until="networkidle")
+                                    await page.goto(pref_link, timeout=PLAYWRIGHT_TIMEOUT_MS, wait_until="networkidle")
                                     self._count_page_visit()
-                                    await asyncio.sleep(0.5)
+                                    await asyncio.sleep(CRAWL_SLEEP_INTERVAL)
 
                                     html = await page.content()
                                     extracted = await self._extract_stores(html, company_name, pref_link, llm)
@@ -1144,7 +1159,7 @@ class AIInferenceStrategy(ScrapingStrategy):
             if analysis.get("prefecture_urls"):
                 # 都道府県別URLが推測された場合
                 log(f"都道府県別URL: {len(analysis['prefecture_urls'])}件")
-                for pref_url in analysis["prefecture_urls"][:47]:
+                for pref_url in analysis["prefecture_urls"][:MAX_PREFECTURES]:
                     try:
                         pref_stores = await self._scrape_page(pref_url, company_name, llm)
                         stores.extend(pref_stores)
@@ -1153,7 +1168,7 @@ class AIInferenceStrategy(ScrapingStrategy):
                         continue
 
             # Step 2: 外部検索で補完（店舗数が少ない場合）
-            if len(stores) < 10:
+            if len(stores) < MAX_PAGES_TO_SCRAPE:
                 log("外部検索で補完中...")
                 search_stores = await self._search_stores_external(company_name, url, llm)
                 stores.extend(search_stores)
@@ -1178,7 +1193,7 @@ class AIInferenceStrategy(ScrapingStrategy):
 
         # ページを取得
         response = await asyncio.to_thread(
-            requests.get, url, headers=HEADERS, timeout=30
+            requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
         self._count_page_visit()
         response.encoding = response.apparent_encoding
@@ -1233,7 +1248,7 @@ class AIInferenceStrategy(ScrapingStrategy):
         """APIから店舗情報を取得"""
         try:
             response = await asyncio.to_thread(
-                requests.get, api_url, headers=HEADERS, timeout=30
+                requests.get, api_url, headers=HEADERS, timeout=REQUEST_TIMEOUT
             )
             self._count_page_visit()
             data = response.json()
@@ -1282,7 +1297,7 @@ class AIInferenceStrategy(ScrapingStrategy):
         """静的解析でページをスクレイピング"""
         static = StaticHTMLStrategy()
         html_resp = await asyncio.to_thread(
-            requests.get, url, headers=HEADERS, timeout=30
+            requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
         self._count_page_visit()
         html_resp.encoding = html_resp.apparent_encoding
