@@ -51,6 +51,7 @@ from core.llm_client import LLMClient, get_default_client
 from core.excel_handler import PlayerData
 from core.sanitizer import sanitize_input, verify_url
 from core.safe_parse import safe_float
+from core.llm_schemas import PlayerValidationLLMResponse, parse_llm_response
 
 
 class PlayerValidator:
@@ -65,8 +66,27 @@ class PlayerValidator:
     5. 統合・買収などの重大ニュースはあるか
     """
 
-    # LLMレスポンスの信頼度閾値（needs_manual_review 判定用）
-    CONFIDENCE_THRESHOLD = 0.6  # これ以下は「要確認」
+    # コスト概算用の単価（USD/API呼び出し）
+    COST_PER_CALL = 0.015
+
+    @staticmethod
+    def estimate_cost(player_count: int) -> dict:
+        """コスト概算を計算
+
+        1プレイヤー = 1回のAPI呼び出し。
+
+        Args:
+            player_count: プレイヤー数
+
+        Returns:
+            {"call_count": int, "cost_per_call": float, "estimated_cost": float}
+        """
+        cost_per_call = PlayerValidator.COST_PER_CALL
+        return {
+            "call_count": player_count,
+            "cost_per_call": cost_per_call,
+            "estimated_cost": player_count * cost_per_call,
+        }
 
     def __init__(
         self,
@@ -86,7 +106,7 @@ class PlayerValidator:
         player_name: str,
         official_url: str = "",
         company_name: str = "",
-        industry: str = "",
+        industry: Optional[str] = None,
     ) -> ValidationResult:
         """
         単一プレイヤーの正誤チェック
@@ -130,7 +150,7 @@ class PlayerValidator:
     async def validate_batch(
         self,
         players: list[PlayerData],
-        industry: str = "",
+        industry: Optional[str] = None,
         on_progress: Callable[[int, int, str], None] = None,
         concurrency: Optional[int] = None,
         delay_seconds: float = 1.0,
@@ -209,14 +229,14 @@ class PlayerValidator:
         player_name: str,
         official_url: str,
         company_name: str,
-        industry: str,
+        industry: Optional[str],
     ) -> str:
         """LLMに最新情報を問い合わせ"""
 
         # 入力をサニタイズ（プロンプトインジェクション対策）
         safe_player_name = self._sanitize_input(player_name)
         safe_company_name = self._sanitize_input(company_name)
-        safe_industry = self._sanitize_input(industry)
+        safe_industry = self._sanitize_input(industry) if industry else ""
         safe_url = self._sanitize_input(official_url)
 
         industry_context = f"（{safe_industry}業界）" if safe_industry else ""
@@ -262,11 +282,21 @@ class PlayerValidator:
 - "company_rename": 運営会社名の変更
 - "service_rename": サービス名の変更（リブランディング）
 - "url_change": URLのみ変更
+
+【正しい判定の例】
+例1: サービスが継続中で変更なし
+{{"is_active": true, "change_type": "none", "confidence": 0.95, "changes": []}}
+
+例2: サービスが終了している場合
+{{"is_active": false, "change_type": "withdrawal", "confidence": 0.9, "changes": ["2025年3月にサービス終了"]}}
+
+例3: 運営会社名が変更された場合
+{{"is_active": true, "change_type": "company_rename", "confidence": 0.85, "changes": ["旧社名→新社名に変更"]}}
 """
 
-        # LLM呼び出し（同期を非同期でラップ）
+        # LLM呼び出し（同期を非同期でラップ、事実確認系は temperature=0.1 統一）
         response = await asyncio.to_thread(
-            lambda: self.llm.call(prompt, model=self.model, use_search=True)
+            lambda: self.llm.call(prompt, model=self.model, use_search=True, temperature=0.1)
         )
         return response
 
@@ -278,7 +308,10 @@ class PlayerValidator:
         original_company: str,
         url_status: Optional[dict],
     ) -> ValidationResult:
-        """LLMのレスポンスを解析してValidationResultを生成"""
+        """LLMのレスポンスを解析してValidationResultを生成
+
+        pydantic スキーマでバリデーション→正規化した後、ValidationResult に変換。
+        """
 
         # JSONを抽出
         data = self.llm.extract_json(response)
@@ -290,8 +323,16 @@ class PlayerValidator:
                 reason="LLMからの応答を解析できませんでした",
             )
 
+        # pydantic でバリデーション + 正規化
+        parsed = parse_llm_response(data, PlayerValidationLLMResponse)
+        if parsed is None:
+            return ValidationResult.create_uncertain(
+                player_name=player_name,
+                url=original_url,
+                reason="LLMレスポンスのバリデーションに失敗しました",
+            )
+
         # 変更タイプを判定
-        change_type_str = data.get("change_type", "none")
         change_type_map = {
             "none": ChangeType.NO_CHANGE,
             "withdrawal": ChangeType.WITHDRAWAL,
@@ -300,52 +341,38 @@ class PlayerValidator:
             "service_rename": ChangeType.SERVICE_RENAME,
             "url_change": ChangeType.URL_CHANGE,
         }
-        change_type = change_type_map.get(change_type_str, ChangeType.NO_CHANGE)
+        change_type = change_type_map.get(parsed.change_type, ChangeType.NO_CHANGE)
 
         # アラートレベルを決定
         alert_level = determine_alert_level(change_type)
 
         # ステータスを決定
-        confidence = safe_float(data.get("confidence"), default=0.5)
-        is_active = data.get("is_active", True)
+        confidence = parsed.confidence
 
-        if not is_active:
+        if not parsed.is_active:
             status = ValidationStatus.CONFIRMED
             change_type = ChangeType.WITHDRAWAL
             alert_level = AlertLevel.CRITICAL
-        elif confidence < self.CONFIDENCE_THRESHOLD:
+        elif confidence < ValidationResult.CONFIDENCE_THRESHOLD:
             status = ValidationStatus.UNCERTAIN
         elif change_type == ChangeType.NO_CHANGE:
             status = ValidationStatus.UNCHANGED
         else:
             status = ValidationStatus.CONFIRMED
 
-        # 変更内容を取得
-        changes = data.get("changes", [])
-        if isinstance(changes, str):
-            changes = [changes] if changes else []
+        # 変更内容（pydantic で既にリスト化済み）
+        changes = list(parsed.changes)
 
         # URLの状態をチェック
-        current_url = data.get("current_url", original_url) or original_url
+        current_url = parsed.current_url or original_url
         if url_status and url_status.get("is_redirect"):
             if url_status["final_url"] != original_url:
-                # URL変更がまだ検出されていない場合のみ追加
                 if change_type != ChangeType.URL_CHANGE:
                     changes.append(f"URLリダイレクト検出: {original_url} → {url_status['final_url']}")
 
-        # ニュースサマリー
-        news = data.get("news", "")
-        if isinstance(news, list):
-            news = " / ".join(news)
-
-        # ソースURL
-        sources = data.get("sources", [])
-        if isinstance(sources, str):
-            sources = [sources] if sources else []
-
         return ValidationResult(
             player_name_original=player_name,
-            player_name_current=data.get("current_service_name", player_name) or player_name,
+            player_name_current=parsed.current_service_name or player_name,
             status=status,
             alert_level=alert_level,
             change_type=change_type,
@@ -353,11 +380,11 @@ class PlayerValidator:
             url_original=original_url,
             url_current=current_url,
             company_name_original=original_company,
-            company_name_current=data.get("current_company_name", original_company) or original_company,
-            source_urls=sources,
-            news_summary=news,
+            company_name_current=parsed.current_company_name or original_company,
+            source_urls=parsed.sources,
+            news_summary=parsed.news,
             checked_at=datetime.now(),
-            needs_manual_review=(status == ValidationStatus.UNCERTAIN or confidence < self.CONFIDENCE_THRESHOLD),
+            needs_manual_review=ValidationResult.should_need_manual_review(status, confidence),
             raw_response=response,
         )
 

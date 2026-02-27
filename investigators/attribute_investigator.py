@@ -34,6 +34,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from investigators.base import AttributeInvestigationResult
 from core.sanitizer import sanitize_input
 from core.attribute_presets import ATTRIBUTE_PRESETS
+from core.llm_schemas import AttributeItemLLMResponse, AttributeBatchLLMResponse, parse_llm_response
 
 
 class AttributeInvestigator:
@@ -118,7 +119,7 @@ class AttributeInvestigator:
         self,
         players: list[dict],
         attributes: list[str],
-        industry: str = "",
+        industry: Optional[str] = None,
         batch_size: Optional[int] = None,
         on_progress: Optional[Callable] = None,
         concurrency: int = 2,
@@ -189,7 +190,7 @@ class AttributeInvestigator:
         self,
         players: list[dict],
         attributes: list[str],
-        industry: str = "",
+        industry: Optional[str] = None,
         context: str = "",
     ) -> list[AttributeInvestigationResult]:
         """1バッチ分の属性調査を実行（複数社まとめて1回のLLM呼び出し）
@@ -213,7 +214,7 @@ class AttributeInvestigator:
         loop = asyncio.get_running_loop()
         raw_response = await loop.run_in_executor(
             None,
-            lambda: llm.call(prompt, model=self.model, temperature=0.1)
+            lambda: llm.call(prompt, model=self.model, temperature=0.1, use_search=True)
         )
 
         # レスポンス解析
@@ -223,7 +224,7 @@ class AttributeInvestigator:
         self,
         players: list[dict],
         attributes: list[str],
-        industry: str = "",
+        industry: Optional[str] = None,
         context: str = "",
     ) -> str:
         """バッチプロンプトを生成
@@ -283,7 +284,11 @@ class AttributeInvestigator:
 - 明確に取り扱いなしと確認 → false
 - 確認できない場合 → null
 - 推測禁止。事実のみ回答すること
-- 各プレイヤーに対して、全属性の判定を必ず含めること"""
+- 各プレイヤーに対して、全属性の判定を必ず含めること
+- nullは最後の手段。公式サイトで確認できれば true/false で回答すること
+
+【正しい判定の例】
+{{"player_name": "Netflix", "attributes": {{"アクション": true, "ホラー": true, "ドキュメンタリー": true}}, "confidence": 0.95, "sources": ["https://www.netflix.com/browse/genre/"]}}"""
 
         return prompt
 
@@ -293,7 +298,7 @@ class AttributeInvestigator:
         players: list[dict],
         attributes: list[str],
     ) -> list[AttributeInvestigationResult]:
-        """バッチレスポンスを解析して結果リストに変換"""
+        """バッチレスポンスを解析して結果リストに変換（pydantic バリデーション）"""
 
         llm = self._get_llm_client()
 
@@ -303,7 +308,6 @@ class AttributeInvestigator:
             data = None
 
         if data is None:
-            # JSON解析失敗 → 全プレイヤーを要確認に
             return [
                 AttributeInvestigationResult.create_uncertain(
                     player_name=p.get("player_name", "不明"),
@@ -313,7 +317,7 @@ class AttributeInvestigator:
                 for p in players
             ]
 
-        # results キーから取得（dict の場合）
+        # results キーから取得（dict の場合）/ リストの場合はそのまま
         if isinstance(data, dict):
             result_list = data.get("results", [])
         elif isinstance(data, list):
@@ -321,28 +325,29 @@ class AttributeInvestigator:
         else:
             result_list = []
 
-        # 結果をプレイヤー名でマッピング
-        results = []
-        result_map = {}
+        # pydantic でバリデーション + 名前マッピング
+        result_map: dict[str, AttributeItemLLMResponse] = {}
         for item in result_list:
             if isinstance(item, dict):
-                name = item.get("player_name", "")
-                result_map[name] = item
+                parsed = parse_llm_response(item, AttributeItemLLMResponse)
+                if parsed and parsed.player_name:
+                    result_map[parsed.player_name] = parsed
 
+        results = []
         for player in players:
             player_name = player.get("player_name", "不明")
 
             # 名前で結果を探す
-            item = result_map.get(player_name)
+            parsed_item = result_map.get(player_name)
 
-            if item is None:
+            if parsed_item is None:
                 # 部分一致で探す
                 for key, val in result_map.items():
                     if player_name in key or key in player_name:
-                        item = val
+                        parsed_item = val
                         break
 
-            if item is None:
+            if parsed_item is None:
                 results.append(
                     AttributeInvestigationResult.create_uncertain(
                         player_name=player_name,
@@ -352,27 +357,22 @@ class AttributeInvestigator:
                 )
                 continue
 
-            # 属性マトリクスを正規化
-            raw_attrs = item.get("attributes", {})
+            # 属性マトリクスを正規化（pydantic で既にバリデーション済み）
             attribute_matrix = {}
             for attr in attributes:
-                value = raw_attrs.get(attr)
+                value = parsed_item.attributes.get(attr)
                 if value is True:
                     attribute_matrix[attr] = True
                 elif value is False:
                     attribute_matrix[attr] = False
                 else:
-                    attribute_matrix[attr] = None  # null/不明
-
-            sources = item.get("sources", [])
-            if isinstance(sources, str):
-                sources = [sources]
+                    attribute_matrix[attr] = None
 
             results.append(
                 AttributeInvestigationResult.create_success(
                     player_name=player_name,
                     attribute_matrix=attribute_matrix,
-                    source_urls=sources,
+                    source_urls=parsed_item.sources,
                 )
             )
 
@@ -383,7 +383,7 @@ class AttributeInvestigator:
         player_name: str,
         official_url: str,
         attributes: list[str],
-        industry: str = "",
+        industry: Optional[str] = None,
         context: str = "",
     ) -> AttributeInvestigationResult:
         """個別プレイヤーの属性調査（精密調査用）

@@ -20,7 +20,7 @@ from core.excel_handler import ExcelHandler, StoreInvestigationExporter
 from core.llm_client import LLMClient
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
-from ui.common import display_progress_log
+from ui.common import display_progress_log, display_cost_estimate
 
 
 # ====================================
@@ -383,6 +383,17 @@ def render_store_tab():
             key="store_run_button",
         )
 
+    # コスト概算表示
+    if st.session_state.store_companies:
+        mode_str = investigation_mode.value
+        cost = StoreInvestigator.estimate_cost(check_limit, mode=mode_str)
+        if cost["estimated_cost"] > 0:
+            display_cost_estimate(
+                call_count=cost["call_count"],
+                cost_per_call=cost["cost_per_call"],
+                label="店舗調査",
+            )
+
     st.divider()
 
     if run_button:
@@ -392,6 +403,11 @@ def render_store_tab():
         status_container = st.empty()
 
         companies_to_check = st.session_state.store_companies[:check_limit]
+        # UI境界: 空文字→None正規化
+        industry_normalized = industry.strip() or None if industry else None
+        # companies の industry も正規化
+        for c in companies_to_check:
+            c["industry"] = industry_normalized
 
         try:
             results = run_async(_run_investigation(

@@ -27,6 +27,7 @@ from investigators.base import StoreInvestigationResult
 from core.async_helpers import optimal_concurrency
 from core.sanitizer import sanitize_input
 from core.safe_parse import safe_float
+from core.llm_schemas import StoreInvestigationLLMResponse, parse_llm_response
 
 
 class InvestigationMode(Enum):
@@ -52,7 +53,39 @@ class StoreInvestigator:
     ```
     """
 
-    CONFIDENCE_THRESHOLD = 0.7  # これ以下でHYBRID時はスクレイピング試行
+    # コスト概算用の単価（USD/API呼び出し）
+    COST_PER_CALL = 0.02
+
+    @staticmethod
+    def estimate_cost(company_count: int, mode: str = "ai") -> dict:
+        """コスト概算を計算
+
+        1企業 = 1回のAPI呼び出し（AIモード）。
+        スクレイピングモードはAPI呼び出しなし。
+
+        Args:
+            company_count: 企業数
+            mode: 調査モード ("ai" / "scraping" / "hybrid")
+
+        Returns:
+            {"call_count": int, "cost_per_call": float, "estimated_cost": float, "mode": str}
+        """
+        if mode == "scraping":
+            return {
+                "call_count": 0,
+                "cost_per_call": 0.0,
+                "estimated_cost": 0.0,
+                "mode": mode,
+            }
+
+        # hybrid はAI + 一部スクレイピング（最悪ケースはAIと同じ）
+        cost_per_call = StoreInvestigator.COST_PER_CALL
+        return {
+            "call_count": company_count,
+            "cost_per_call": cost_per_call,
+            "estimated_cost": company_count * cost_per_call,
+            "mode": mode,
+        }
 
     # 入力サニタイズ用の危険パターン
     DANGEROUS_PATTERNS = [
@@ -63,11 +96,6 @@ class StoreInvestigator:
         r"\{\{.*\}\}",
         r"```.*system",
     ]
-
-    @staticmethod
-    def is_confident(result: StoreInvestigationResult) -> bool:
-        """AI調査結果を採用してよいか判定する（ハイブリッドモード用）"""
-        return not result.needs_verification and result.total_stores > 0
 
     def __init__(
         self,
@@ -112,7 +140,7 @@ class StoreInvestigator:
         self,
         company_name: str,
         official_url: str = "",
-        industry: str = "",
+        industry: Optional[str] = None,
         mode: InvestigationMode = InvestigationMode.AI,
         on_progress: Optional[Callable[[str], None]] = None,
     ) -> StoreInvestigationResult:
@@ -136,7 +164,7 @@ class StoreInvestigator:
         # 入力サニタイズ
         company_name = self._sanitize_input(company_name)
         official_url = self._sanitize_input(official_url)
-        industry = self._sanitize_input(industry)
+        industry = self._sanitize_input(industry) if industry else None
 
         if not company_name:
             return StoreInvestigationResult.create_error(
@@ -182,7 +210,7 @@ class StoreInvestigator:
         self,
         company_name: str,
         official_url: str,
-        industry: str,
+        industry: Optional[str],
         log: Callable[[str], None],
     ) -> StoreInvestigationResult:
         """AI（LLM）による店舗調査"""
@@ -196,7 +224,7 @@ class StoreInvestigator:
 
         try:
             # LLM呼び出し
-            response = llm.call(prompt, model=self.model, use_search=True)
+            response = llm.call(prompt, model=self.model, use_search=True, temperature=0.1)
             log("LLMレスポンスを解析中...")
 
             # レスポンス解析
@@ -228,7 +256,7 @@ class StoreInvestigator:
         self,
         company_name: str,
         official_url: str,
-        industry: str,
+        industry: Optional[str],
         current_year: int,
     ) -> str:
         """AI調査用プロンプトを生成（v5.1 精度向上版）"""
@@ -285,7 +313,7 @@ class StoreInvestigator:
         company_name: str,
         response: str,
     ) -> StoreInvestigationResult:
-        """AIレスポンスを解析"""
+        """AIレスポンスを解析（pydantic スキーマでバリデーション）"""
         import json
 
         # JSONを抽出
@@ -314,21 +342,18 @@ class StoreInvestigator:
                 raw_response=response,
             )
 
-        # データ抽出
-        total_stores = data.get("total_stores", 0)
-        if isinstance(total_stores, str):
-            # "約100店舗" のような文字列を数値に変換
-            match = re.search(r'\d+', total_stores)
-            total_stores = int(match.group()) if match else 0
-
-        direct_stores = data.get("direct_stores")
-        franchise_stores = data.get("franchise_stores")
-
-        # 店舗一覧ページURL（v5.1で追加）
-        store_list_url = data.get("store_list_url")
+        # pydantic でバリデーション + 正規化
+        parsed = parse_llm_response(data, StoreInvestigationLLMResponse)
+        if parsed is None:
+            return StoreInvestigationResult.create_uncertain(
+                company_name=company_name,
+                investigation_mode="ai",
+                reason="LLMレスポンスのバリデーションに失敗しました",
+                raw_response=response,
+            )
 
         # 都道府県データ（新形式: prefecture_presence / 旧形式: prefecture_distribution）
-        prefecture_presence = data.get("prefecture_presence") or data.get("prefecture_distribution")
+        prefecture_presence = parsed.prefecture_presence or parsed.prefecture_distribution
 
         # 都道府県別有無データを正規化
         prefecture_distribution = None
@@ -341,40 +366,36 @@ class StoreInvestigator:
                 elif value is False:
                     prefecture_distribution[pref] = False
                 elif isinstance(value, int) and value > 0:
-                    # 旧形式（数値）の場合は true に変換
                     prefecture_distribution[pref] = True
                 elif isinstance(value, int) and value == 0:
                     prefecture_distribution[pref] = False
                 else:
-                    prefecture_distribution[pref] = None  # 不明
+                    prefecture_distribution[pref] = None
 
-        confidence = safe_float(data.get("confidence"), default=0.5)
-        sources = data.get("sources", [])
-        notes = data.get("notes", "")
-
-        # ソースURLの妥当性チェック
-        if not isinstance(sources, list):
-            sources = [sources] if sources else []
-        sources = [s for s in sources if isinstance(s, str) and s.startswith("http")]
+        # ソースURLの妥当性チェック（pydantic で既にリスト化済み）
+        sources = [s for s in parsed.sources if isinstance(s, str) and s.startswith("http")]
 
         # store_list_url をソースURLに追加（重複を避ける）
+        store_list_url = parsed.store_list_url
         if store_list_url and isinstance(store_list_url, str) and store_list_url.startswith("http"):
             if store_list_url not in sources:
-                sources.insert(0, store_list_url)  # 先頭に追加
+                sources.insert(0, store_list_url)
 
-        # 要確認フラグ
-        needs_verification = confidence < self.CONFIDENCE_THRESHOLD or total_stores == 0
+        # 要確認フラグ（判定ロジックは base.py に一元化）
+        needs_verification = StoreInvestigationResult.should_need_verification(
+            parsed.total_stores, parsed.confidence
+        )
 
         return StoreInvestigationResult(
             company_name=company_name,
-            total_stores=total_stores,
+            total_stores=parsed.total_stores,
             source_urls=sources,
             investigation_date=datetime.now(),
             investigation_mode="ai",
-            direct_stores=direct_stores if isinstance(direct_stores, int) else None,
-            franchise_stores=franchise_stores if isinstance(franchise_stores, int) else None,
+            direct_stores=parsed.direct_stores if isinstance(parsed.direct_stores, int) else None,
+            franchise_stores=parsed.franchise_stores if isinstance(parsed.franchise_stores, int) else None,
             prefecture_distribution=prefecture_distribution if isinstance(prefecture_distribution, dict) else None,
-            notes=notes,
+            notes=parsed.notes,
             needs_verification=needs_verification,
             raw_response=response,
         )
@@ -450,7 +471,7 @@ class StoreInvestigator:
         self,
         company_name: str,
         official_url: str,
-        industry: str,
+        industry: Optional[str],
         log: Callable[[str], None],
     ) -> StoreInvestigationResult:
         """ハイブリッド調査（AI → スクレイピング補完）"""
@@ -462,7 +483,7 @@ class StoreInvestigator:
         )
 
         # Step 2: 信頼度チェック（is_confident: needs_verification=False かつ total_stores>0）
-        if StoreInvestigator.is_confident(ai_result):
+        if ai_result.is_confident:
             log("AI調査の結果が十分です")
             ai_result = StoreInvestigationResult(
                 company_name=ai_result.company_name,

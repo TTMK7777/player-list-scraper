@@ -1,4 +1,4 @@
-# プレイヤーリスト調査システム v6.3
+# プレイヤーリスト調査システム v6.5
 
 オリコン業務向けの**プレイヤーリスト調査・正誤チェック自動化ツール**。
 
@@ -25,7 +25,12 @@
 - 既存リストに含まれない新規参入企業を自動検索
 - 業界別の最新参入情報を取得
 
-### 5. 3段階チェック（ワークフロー）
+### 5. 0ベースプレイヤーリスト生成 (v6.5 NEW)
+- 既存リストなしで**業界名+条件**からプレイヤーリストをAI自動生成
+- URL自動検証 + 手動確認の2段階ゲート
+- チェックボックス選択 → Excel/CSVエクスポート
+
+### 6. 3段階チェック（ワークフロー）
 - Phase 1: 実査前チェック（正誤全件 + 新規参入 + 属性全件）
 - Phase 2: ランキング確定時チェック（正誤全件 + 属性変更分）
 - Phase 3: 発表前チェック（CRITICALのみ再検証 + 最終確認）
@@ -82,7 +87,7 @@ APP_PASSWORD   = "チームで決めたパスワード"
 
 ```
 プレイヤーリスト作成/
-├── app_v5.py                    # 統合GUI (全5機能)
+├── app_v5.py                    # 統合GUI (全6機能)
 │
 ├── core/                        # コアモジュール
 │   ├── async_helpers.py         # 非同期ヘルパー (run_async, 動的並列化)
@@ -96,6 +101,7 @@ APP_PASSWORD   = "チームで決めたパスワード"
 │   ├── postal_prefecture.py     # 郵便番号→都道府県変換
 │   ├── check_history.py         # チェック履歴管理 + 差分計算
 │   ├── check_workflow.py        # 3段階ワークフロー管理
+│   ├── llm_schemas.py           # pydantic LLMレスポンススキーマ (v6.5)
 │   └── logger.py                # ロギング設定 (日次ローテーション → Logs/)
 │
 ├── investigators/               # 調査モジュール
@@ -103,7 +109,8 @@ APP_PASSWORD   = "チームで決めたパスワード"
 │   ├── player_validator.py      # 正誤チェッカー
 │   ├── store_investigator.py    # 店舗調査エンジン
 │   ├── attribute_investigator.py # 汎用調査エンジン (v6.2 context対応)
-│   └── newcomer_detector.py     # 新規参入検出
+│   ├── newcomer_detector.py     # 新規参入検出
+│   └── player_list_generator.py # 0ベースリスト生成 (v6.5)
 │
 ├── ui/                          # UIモジュール
 │   ├── common.py                # 共通コンポーネント
@@ -111,7 +118,8 @@ APP_PASSWORD   = "チームで決めたパスワード"
 │   ├── store_tab.py             # 店舗調査タブ（従来版）
 │   ├── attribute_tab.py         # 汎用調査タブ (v6.2 リファクタ)
 │   ├── newcomer_tab.py          # 新規参入検出タブ
-│   └── workflow_tab.py          # 3段階チェックタブ
+│   ├── workflow_tab.py          # 3段階チェックタブ
+│   └── generator_tab.py         # リスト生成タブ (v6.5)
 │
 ├── templates/                   # 調査テンプレート (v6.2)
 │   ├── builtin/                 # 組み込みテンプレート (git管理)
@@ -122,7 +130,7 @@ APP_PASSWORD   = "チームで決めたパスワード"
 ├── Logs/                        # エラーログ (gitignore, 30日保持)
 │   └── app.log                  # 日次ローテーション
 │
-├── tests/                       # テストスイート (pytest, 367件)
+├── tests/                       # テストスイート (pytest, 405件)
 │   ├── conftest.py              # 共通フィクスチャ
 │   ├── test_async_helpers.py
 │   ├── test_investigation_templates.py
@@ -138,7 +146,9 @@ APP_PASSWORD   = "チームで決めたパスワード"
 │   ├── test_safe_parse.py
 │   ├── test_sanitizer.py
 │   ├── test_store_investigator.py
-│   └── test_store_scraper_pages_visited.py
+│   ├── test_store_scraper_pages_visited.py
+│   ├── test_base.py                 # 判定ロジックテスト (v6.5)
+│   └── test_llm_schemas.py          # pydanticスキーマテスト (v6.5)
 │
 ├── HANDOVER.md                  # 引き継ぎドキュメント
 ├── pytest.ini                   # pytest設定
@@ -173,6 +183,7 @@ pytest tests/ --cov=. --cov-report=html
 
 | Ver | 日付 | 変更内容 |
 |-----|------|---------|
+| **v6.5** | 2026-02-27 | P2修正（industry型明確化、判定ロジック一元化、pydanticスキーマ）+ 新機能（コスト表示、API精度向上、0ベースリスト生成）、テスト405件 |
 | **v6.4** | 2026-02-26 | 信頼度削除・業界自動推測・モード説明・ロギング・AI-2G指摘修正 |
 | **v6.3** | 2026-02-24 | Perplexity→Gemini一本化（Google検索グラウンディング対応） |
 | **v6.2** | 2026-02-17 | 汎用調査エンジン（テンプレート管理、context対応、UI統合、地理系テンプレート追加）、テスト367件 |

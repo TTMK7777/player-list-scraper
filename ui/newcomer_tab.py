@@ -19,7 +19,7 @@ from core.excel_handler import ExcelHandler
 from core.llm_client import LLMClient
 from core.sanitizer import sanitize_input
 from investigators.newcomer_detector import NewcomerDetector
-from ui.common import display_verification_badge
+from ui.common import display_verification_badge, display_cost_estimate
 
 
 def render_newcomer_tab():
@@ -103,6 +103,15 @@ def render_newcomer_tab():
         key="newcomer_industry_input",
     )
 
+    # コスト概算表示
+    if st.session_state.existing_players and industry:
+        cost = NewcomerDetector.estimate_cost()
+        display_cost_estimate(
+            call_count=cost["call_count"],
+            cost_per_call=cost["cost_per_call"],
+            label="新規参入検出",
+        )
+
     # 検出実行
     run_button = st.button(
         "新規参入を検索",
@@ -128,6 +137,8 @@ def render_newcomer_tab():
                 unsafe_allow_html=True,
             )
 
+        # UI境界: 空文字→None正規化
+        industry_normalized = industry.strip() or None if industry else None
         status_container.info("新規参入候補を検索中...")
 
         try:
@@ -135,7 +146,7 @@ def render_newcomer_tab():
             detector = NewcomerDetector(llm_client=llm)
 
             candidates = run_async(detector.detect(
-                industry=industry,
+                industry=industry_normalized,
                 existing_players=st.session_state.existing_players,
                 on_progress=on_progress,
             ))

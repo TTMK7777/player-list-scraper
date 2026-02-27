@@ -75,6 +75,27 @@ class ValidationResult:
     needs_manual_review: bool = False
     raw_response: str = ""  # LLMの生レスポンス（デバッグ用）
 
+    # 手動確認判定の信頼度閾値（should_need_manual_review のデフォルト）
+    CONFIDENCE_THRESHOLD = 0.6
+
+    @staticmethod
+    def should_need_manual_review(
+        status: "ValidationStatus",
+        confidence: float,
+        threshold: float = 0.6,
+    ) -> bool:
+        """正誤チェック結果に手動確認が必要か判定
+
+        Args:
+            status: 検証ステータス
+            confidence: LLMレスポンスの信頼度 (0.0〜1.0)
+            threshold: 信頼度閾値（これ以下は要確認）
+
+        Returns:
+            True = 手動確認が必要
+        """
+        return status == ValidationStatus.UNCERTAIN or confidence < threshold
+
     @classmethod
     def create_unchanged(
         cls,
@@ -201,6 +222,32 @@ class StoreInvestigationResult:
     notes: str = ""
     needs_verification: bool = False
     raw_response: str = ""
+
+    @staticmethod
+    def should_need_verification(
+        total_stores: int,
+        confidence: float,
+        threshold: float = 0.7,
+    ) -> bool:
+        """店舗調査結果に手動確認が必要か判定
+
+        Args:
+            total_stores: 調査された店舗総数
+            confidence: LLMレスポンスの信頼度 (0.0〜1.0)
+            threshold: 信頼度閾値（これ以下は要確認）
+
+        Returns:
+            True = 手動確認が必要
+        """
+        return confidence < threshold or total_stores == 0
+
+    @property
+    def is_confident(self) -> bool:
+        """AI調査結果を採用してよいか（ハイブリッドモード用）
+
+        needs_verification=False かつ total_stores>0 であれば信頼できる。
+        """
+        return not self.needs_verification and self.total_stores > 0
 
     @classmethod
     def create_success(
@@ -361,6 +408,41 @@ class AttributeInvestigationResult:
             "source_urls": self.source_urls,
             "investigation_date": self.investigation_date.isoformat() if self.investigation_date else "",
             "needs_verification": self.needs_verification,
+        }
+
+
+@dataclass
+class GeneratedPlayer:
+    """
+    0ベース生成プレイヤー候補
+
+    【フィールド説明】
+    - player_name: プレイヤー名
+    - official_url: 公式サイトURL
+    - company_name: 運営会社名
+    - source_urls: 情報源URL
+    - reason: リストに含める理由
+    - url_verified: URL存在確認済みか
+    - category: 業界内カテゴリ（任意）
+    """
+    player_name: str
+    official_url: str = ""
+    company_name: str = ""
+    source_urls: list[str] = field(default_factory=list)
+    reason: str = ""
+    url_verified: bool = False
+    category: str = ""
+
+    def to_dict(self) -> dict:
+        """辞書形式に変換"""
+        return {
+            "player_name": self.player_name,
+            "official_url": self.official_url,
+            "company_name": self.company_name,
+            "source_urls": self.source_urls,
+            "reason": self.reason,
+            "url_verified": self.url_verified,
+            "category": self.category,
         }
 
 

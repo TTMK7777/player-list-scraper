@@ -25,10 +25,29 @@ def display_progress_log(logs: list[str], container) -> None:
 
 
 def display_cost_warning(estimated_cost: float, batch_count: int, player_count: int) -> None:
-    """コスト概算の警告を表示"""
+    """コスト概算の警告を表示（attribute_tab 用の既存関数）"""
     st.warning(
         f"推定コスト: 約${estimated_cost:.2f}（{player_count}件 × {batch_count}バッチ）\n\n"
         "初回は少数でテストすることを推奨します。"
+    )
+
+
+def display_cost_estimate(
+    call_count: int,
+    cost_per_call: float,
+    label: str = "API呼び出し",
+) -> None:
+    """汎用コスト概算を表示
+
+    Args:
+        call_count: API呼び出し回数
+        cost_per_call: 1回あたりのコスト（USD）
+        label: 表示ラベル
+    """
+    estimated_cost = call_count * cost_per_call
+    st.info(
+        f"推定コスト: 約${estimated_cost:.3f}"
+        f"（{call_count}回 × ${cost_per_call:.3f}/{label}）"
     )
 
 

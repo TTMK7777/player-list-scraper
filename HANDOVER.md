@@ -1,8 +1,76 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-02-26
-> **担当**: Claude Sonnet 4.6 + たいむさん
-> **バージョン**: v6.4
+> **最終更新**: 2026-02-27
+> **担当**: Claude Opus 4.6 + たいむさん
+> **バージョン**: v6.5
+
+## セッション: 2026-02-27
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v6.5: P2修正3件 + 新機能3件（Phase A + Phase B 一括実装） |
+| **変更ファイル** | 14 modified + 6 new = 20ファイル（+365行 -136行） |
+| **テスト** | 405件全パス（363既存 + 42新規、回帰なし） |
+| **品質ゲート** | プラン: /取締役会 条件付きGo（I1/I2反映済み） |
+| **ステータス** | 完了 |
+
+### Phase A: P2修正（v6.4 AI-2G指摘の対応）
+
+#### 課題2: industry型定義明確化
+- 全investigator の `industry: str = ""` → `Optional[str] = None` に統一
+- UI境界で `industry.strip() or None` 変換を追加
+- `check_history.py` の `to_dict()` で `None → ""` JSON互換変換
+
+#### 課題1: 判定ロジック一元化
+- `base.py` に `should_need_manual_review()`, `should_need_verification()` 静的メソッド集約
+- `StoreInvestigationResult.is_confident` プロパティ追加
+- `player_validator.py`, `store_investigator.py` の散在ロジックを削除
+
+#### 課題3: pydantic LLMスキーマバリデーション
+- `core/llm_schemas.py` 新規作成（5スキーマ + `parse_llm_response()` ユーティリティ）
+- 全4 investigator のパーサーを pydantic 経由に簡素化
+- `requirements.txt` に `pydantic>=2.0.0,<3.0.0` 追加
+
+### Phase B: 新機能
+
+#### 課題4: コスト推定表示（全タブ展開）
+- `ui/common.py` に `display_cost_estimate()` 汎用関数追加
+- 全investigatorに `estimate_cost()` メソッド追加
+- 正誤チェック/店舗調査/新規参入/3段階チェック全タブに表示
+
+#### 課題6: API検索精度の全般的底上げ
+- 全investigatorに `temperature=0.1` 統一
+- `attribute_investigator.py` に `use_search=True` 追加（唯一の未設定）
+- 全investigatorにFew-shot例示追加
+
+#### 課題5: 0ベースプレイヤーリスト生成モード
+- `investigators/player_list_generator.py` 新規（LLM→URL検証パイプライン）
+- `investigators/base.py` に `GeneratedPlayer` データクラス追加
+- `ui/generator_tab.py` 新規（業界名+条件→生成→手動確認→Excel出力）
+- `app_v5.py` に「リスト生成」タブ追加
+
+### 新規ファイル
+| ファイル | 内容 |
+|---------|------|
+| `core/llm_schemas.py` | pydantic LLMレスポンススキーマ（5モデル） |
+| `investigators/player_list_generator.py` | 0ベースリスト生成エンジン |
+| `ui/generator_tab.py` | リスト生成タブUI |
+| `tests/test_base.py` | base.pyの判定ロジックテスト（18件） |
+| `tests/test_llm_schemas.py` | pydanticスキーマテスト（24件） |
+
+### 残課題（手動確認）
+- 各タブのコスト表示を目視確認（課題4）
+- 「動画配信サービス」で0ベース生成→URL検証→Excel出力の一連テスト（課題5）
+- クレカ20件サンプリングで精度変更前後比較（課題6）
+
+### 未着手の改善候補（旧セッションから継続）
+- [R] `excel_handler.py` SRP違反解消（741行に4責務混在）
+- [E] テンプレートIDのASCIIスラッグ化
+- [E] カテゴリ値対応（boolean以外の多値分類）
+- [E] LLMClient の AsyncContextManager 化
+
+---
 
 ## セッション: 2026-02-26 (3)
 

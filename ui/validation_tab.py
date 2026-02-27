@@ -19,7 +19,7 @@ from core.excel_handler import ExcelHandler, PlayerData
 from core.llm_client import LLMClient
 from investigators.base import AlertLevel, ValidationResult
 from investigators.player_validator import PlayerValidator
-from ui.common import display_progress_log, display_filter_multiselect
+from ui.common import display_progress_log, display_filter_multiselect, display_cost_estimate
 
 
 # ====================================
@@ -284,6 +284,15 @@ def render_validation_tab(industry: str):
             use_container_width=True,
         )
 
+    # コスト概算表示
+    if st.session_state.val_players:
+        cost = PlayerValidator.estimate_cost(check_limit)
+        display_cost_estimate(
+            call_count=cost["call_count"],
+            cost_per_call=cost["cost_per_call"],
+            label="正誤チェック",
+        )
+
     st.divider()
 
     if run_button:
@@ -293,11 +302,13 @@ def render_validation_tab(industry: str):
         status_container = st.empty()
 
         players_to_check = st.session_state.val_players[:check_limit]
+        # UI境界: 空文字→None正規化
+        industry_normalized = industry.strip() or None if industry else None
 
         try:
             results = run_async(_run_validation(
                 players_to_check,
-                industry=industry,
+                industry=industry_normalized,
                 progress_container=progress_container,
                 status_container=status_container,
             ))

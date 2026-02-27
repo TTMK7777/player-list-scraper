@@ -26,6 +26,7 @@ from core.llm_client import LLMClient
 from core.excel_handler import ExcelHandler
 from investigators.player_validator import PlayerValidator
 from investigators.base import AlertLevel, ValidationResult
+from ui.common import display_cost_estimate
 
 
 def render_workflow_tab(industry: str):
@@ -150,6 +151,15 @@ def render_workflow_tab(industry: str):
             key="workflow_run_button",
         )
 
+    # コスト概算表示
+    if players:
+        cost = PlayerValidator.estimate_cost(check_limit)
+        display_cost_estimate(
+            call_count=cost["call_count"],
+            cost_per_call=cost["cost_per_call"],
+            label="正誤チェック",
+        )
+
     st.divider()
 
     if run_button:
@@ -157,9 +167,12 @@ def render_workflow_tab(industry: str):
         progress_container = st.empty()
         status_container = st.empty()
 
+        # UI境界: 空文字→None正規化
+        industry_normalized = industry.strip() or None if industry else None
+
         # フェーズに応じた対象絞り込み
         target_players = workflow.get_validation_players(
-            selected_phase, players[:check_limit], industry
+            selected_phase, players[:check_limit], industry_normalized
         )
 
         logs = []
@@ -183,7 +196,7 @@ def render_workflow_tab(industry: str):
 
             results = run_async(validator.validate_batch(
                 target_players,
-                industry=industry,
+                industry=industry_normalized,
                 on_progress=on_progress,
                 concurrency=2,
                 delay_seconds=1.5,
@@ -199,7 +212,7 @@ def render_workflow_tab(industry: str):
 
             record = workflow.create_record(
                 phase=selected_phase,
-                industry=industry,
+                industry=industry_normalized,
                 player_count=len(results),
                 summary=summary,
             )

@@ -38,6 +38,7 @@ from ui.newcomer_tab import render_newcomer_tab
 from ui.store_tab import render_store_tab
 from ui.validation_tab import render_validation_tab
 from ui.workflow_tab import render_workflow_tab
+from ui.generator_tab import render_generator_tab
 
 # ページ設定
 st.set_page_config(
@@ -223,6 +224,7 @@ def main():
             "🏪 店舗調査（従来版）",
             "🆕 新規参入検出",
             "📋 3段階チェック",
+            "🆕 リスト生成",
         ],
         horizontal=True,
         label_visibility="collapsed",
@@ -243,6 +245,8 @@ def main():
         render_validation_tab(industry=industry)
     elif "店舗調査" in function_type:
         render_store_tab()
+    elif "リスト生成" in function_type:
+        render_generator_tab()
 
 
 if __name__ == "__main__":

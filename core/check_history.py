@@ -30,20 +30,28 @@ class CheckRecord:
     """1回のチェック記録"""
     record_id: str = ""                     # UUID
     phase: str = ""                         # "pre_survey" / "ranking_confirmed" / "pre_release"
-    industry: str = ""                      # 業界名
+    industry: Optional[str] = None          # 業界名（None = 未指定）
     executed_at: str = ""                   # ISO 8601 形式
     player_count: int = 0                   # チェック対象数
     results_file: str = ""                  # 結果ファイルパス
     summary: dict = field(default_factory=dict)  # {critical: 0, warning: 2, ...}
 
     def to_dict(self) -> dict:
-        """辞書変換"""
-        return asdict(self)
+        """辞書変換（JSON互換: None→""）"""
+        d = asdict(self)
+        # JSON互換: industry が None の場合は空文字に変換
+        if d.get("industry") is None:
+            d["industry"] = ""
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "CheckRecord":
-        """辞書から生成"""
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        """辞書から生成（空文字→None正規化）"""
+        filtered = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
+        # 空文字→None正規化
+        if "industry" in filtered:
+            filtered["industry"] = filtered["industry"] or None
+        return cls(**filtered)
 
 
 @dataclass
