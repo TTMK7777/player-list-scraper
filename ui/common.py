@@ -135,7 +135,7 @@ def number_input_with_max(
     """「全件」ボタン付き number_input
 
     2カラムレイアウト: [number_input | 全件ボタン]
-    全件クリック時は session_state[key] を max_value に設定してリランする。
+    全件クリック時はフラグを立ててリランし、次回描画で value を max_value にする。
 
     Args:
         label: 入力ラベル
@@ -147,6 +147,12 @@ def number_input_with_max(
     Returns:
         現在の値
     """
+    # 全件フラグが立っていたら value を max_value にして消費
+    flag_key = f"{key}_use_max"
+    if st.session_state.get(flag_key, False):
+        default_value = max_value
+        del st.session_state[flag_key]
+
     col_input, col_btn = st.columns([3, 1])
     with col_input:
         value = st.number_input(
@@ -160,7 +166,7 @@ def number_input_with_max(
     with col_btn:
         st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
         if st.button("全件", key=f"{key}_max_btn", use_container_width=True):
-            st.session_state[key] = max_value
+            st.session_state[flag_key] = True
             st.rerun()
 
     return value
