@@ -14,6 +14,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+# USD → JPY 換算レート（固定）
+USD_TO_JPY = 150
+
 
 def display_progress_log(logs: list[str], container) -> None:
     """進捗ログを表示"""
@@ -25,9 +28,16 @@ def display_progress_log(logs: list[str], container) -> None:
 
 
 def display_cost_warning(estimated_cost: float, batch_count: int, player_count: int) -> None:
-    """コスト概算の警告を表示（attribute_tab 用の既存関数）"""
+    """コスト概算の警告を表示（attribute_tab 用の既存関数）
+
+    Args:
+        estimated_cost: 推定コスト（USD）。
+        batch_count: バッチ数。
+        player_count: プレイヤー数。
+    """
+    estimated_cost_jpy = estimated_cost * USD_TO_JPY
     st.warning(
-        f"推定コスト: 約${estimated_cost:.2f}（{player_count}件 × {batch_count}バッチ）\n\n"
+        f"推定コスト: 約{estimated_cost_jpy:.1f}円（{player_count}件 × {batch_count}バッチ）\n\n"
         "初回は少数でテストすることを推奨します。"
     )
 
@@ -44,10 +54,12 @@ def display_cost_estimate(
         cost_per_call: 1回あたりのコスト（USD）
         label: 表示ラベル
     """
-    estimated_cost = call_count * cost_per_call
+    estimated_cost_usd = call_count * cost_per_call
+    estimated_cost_jpy = estimated_cost_usd * USD_TO_JPY
+    cost_per_call_jpy = cost_per_call * USD_TO_JPY
     st.info(
-        f"推定コスト: 約${estimated_cost:.3f}"
-        f"（{call_count}回 × ${cost_per_call:.3f}/{label}）"
+        f"推定コスト: 約{estimated_cost_jpy:.1f}円"
+        f"（{call_count}回 × {cost_per_call_jpy:.2f}円/{label}）"
     )
 
 

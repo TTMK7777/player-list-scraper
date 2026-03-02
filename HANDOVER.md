@@ -1,8 +1,51 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-02-27
+> **最終更新**: 2026-03-02
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.5
+> **バージョン**: v6.5.1
+
+## セッション: 2026-03-02
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | コスト表示の日本円化 + 正誤チェック解析失敗のデバッグログ追加 |
+| **変更ファイル** | `ui/common.py`, `investigators/player_validator.py` (2ファイル, +32行 -5行) |
+| **テスト** | 表示層のみの変更、既存405件に影響なし |
+| **品質ゲート** | simple（表示変更+ログ追加）、省略 |
+| **ステータス** | 完了 |
+
+### 変更詳細
+
+#### 1. コスト表示の日本円化 (`ui/common.py`)
+- `USD_TO_JPY = 150` 定数を追加（固定レート）
+- `display_cost_estimate()`: `約$0.450（30回 × $0.015/正誤チェック）` → `約67.5円（30回 × 2.25円/正誤チェック）`
+- `display_cost_warning()`: `約$0.45（30件 × 2バッチ）` → `約67.5円（30件 × 2バッチ）`
+- investigator側の `COST_PER_CALL` はUSD維持（API料金がUSD建てのため、表示層のみ変換）
+- 全6タブ（generator, newcomer, store, validation, workflow, attribute）に自動反映
+
+#### 2. 正誤チェック解析失敗のデバッグログ (`investigators/player_validator.py`)
+- `logging` + `logger = getLogger(__name__)` 追加
+- `_parse_response()` の2箇所にWARNINGログ追加:
+  - JSON抽出失敗時: プレイヤー名、戻り値の型、raw_response（先頭2000文字）
+  - pydanticバリデーション失敗時: プレイヤー名、抽出されたJSON（先頭1000文字）
+- 出力先: `Logs/app.log`（既存のロギング基盤を利用）
+
+### 調査メモ: 「LLMからの応答を解析できませんでした」問題
+- **発生**: 30件中5件（Azure OpenAI Service, ナレフルチャット, AIアシスタント, Forefront AI, GitHub Copilot (法人プラン)）
+- **原因箇所**: `player_validator.py:_parse_response()` → `extract_json()` が `None` を返す
+- **推定原因**: Gemini `use_search=True` 時にJSON形式を無視したテキスト回答 / JSONが途中で切れる / 不正なJSON
+- **次のステップ**: 再実行してログからraw_responseを確認 → 原因確定 → 対策実装（リトライ / extract_json強化 / response_mime_type等）
+
+### 残課題
+- [ ] 正誤チェック解析失敗の対策実装（ログ確認後）
+- [ ] 各タブのコスト日本円表示を目視確認
+- (継続) [R] `excel_handler.py` SRP違反解消
+- (継続) [E] テンプレートIDのASCIIスラッグ化
+- (継続) [E] カテゴリ値対応（boolean以外の多値分類）
+- (継続) [E] LLMClient の AsyncContextManager 化
+
+---
 
 ## セッション: 2026-02-27
 

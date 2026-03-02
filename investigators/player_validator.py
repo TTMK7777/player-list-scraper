@@ -29,9 +29,12 @@ results = await validator.validate_batch(players)
 
 import asyncio
 import json
+import logging
 import re
 from datetime import datetime
 from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 from .base import (
     AlertLevel,
@@ -317,6 +320,13 @@ class PlayerValidator:
         data = self.llm.extract_json(response)
 
         if not data or not isinstance(data, dict):
+            logger.warning(
+                "[%s] JSON抽出失敗 — extract_json returned %s\n"
+                "--- raw_response start ---\n%s\n--- raw_response end ---",
+                player_name,
+                type(data).__name__ if data is not None else "None",
+                response[:2000] if response else "(empty)",
+            )
             return ValidationResult.create_uncertain(
                 player_name=player_name,
                 url=original_url,
@@ -326,6 +336,11 @@ class PlayerValidator:
         # pydantic でバリデーション + 正規化
         parsed = parse_llm_response(data, PlayerValidationLLMResponse)
         if parsed is None:
+            logger.warning(
+                "[%s] pydanticバリデーション失敗 — extracted data: %s",
+                player_name,
+                json.dumps(data, ensure_ascii=False, default=str)[:1000],
+            )
             return ValidationResult.create_uncertain(
                 player_name=player_name,
                 url=original_url,
