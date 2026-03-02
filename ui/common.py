@@ -135,39 +135,47 @@ def number_input_with_max(
     """「全件」ボタン付き number_input
 
     2カラムレイアウト: [number_input | 全件ボタン]
-    全件クリック時はフラグを立ててリランし、次回描画で value を max_value にする。
+    全件クリック時は on_click コールバックで session_state[key] を更新。
 
     Args:
         label: 入力ラベル
         max_value: 最大値（全件ボタンで設定される値）
         default_value: 初期デフォルト値
-        key: Streamlit widget の session state key
+        key: Streamlit widget の session state key（必須）
         help: ヘルプテキスト
 
     Returns:
         現在の値
     """
-    # 全件フラグが立っていたら value を max_value にして消費
-    flag_key = f"{key}_use_max"
-    if st.session_state.get(flag_key, False):
-        default_value = max_value
-        del st.session_state[flag_key]
+    safe_max = max(1, max_value)
+
+    # 初期値設定（初回のみ）
+    st.session_state.setdefault(key, min(default_value, safe_max))
+
+    # max_value 変動時のクランプ（Excel再アップロード等）
+    if st.session_state[key] > safe_max:
+        st.session_state[key] = safe_max
+    if st.session_state[key] < 1:
+        st.session_state[key] = 1
+
+    def _set_max():
+        st.session_state[key] = safe_max
 
     col_input, col_btn = st.columns([3, 1])
     with col_input:
         value = st.number_input(
             label,
             min_value=1,
-            max_value=max(1, max_value),
-            value=min(default_value, max(1, max_value)),
+            max_value=safe_max,
             key=key,
             help=help,
         )
     with col_btn:
         st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-        if st.button("全件", key=f"{key}_max_btn", use_container_width=True):
-            st.session_state[flag_key] = True
-            st.rerun()
+        st.button(
+            "全件", key=f"{key}_max_btn",
+            on_click=_set_max, use_container_width=True,
+        )
 
     return value
 
