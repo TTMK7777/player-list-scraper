@@ -125,6 +125,47 @@ def select_sheet_if_multiple(file_path, key_prefix: str) -> Optional[list[str]]:
     return None
 
 
+def number_input_with_max(
+    label: str,
+    max_value: int,
+    default_value: int = 10,
+    key: str = "",
+    help: str = "APIコスト削減のため、最初は少数でテストしてください",
+) -> int:
+    """「全件」ボタン付き number_input
+
+    2カラムレイアウト: [number_input | 全件ボタン]
+    全件クリック時は session_state[key] を max_value に設定してリランする。
+
+    Args:
+        label: 入力ラベル
+        max_value: 最大値（全件ボタンで設定される値）
+        default_value: 初期デフォルト値
+        key: Streamlit widget の session state key
+        help: ヘルプテキスト
+
+    Returns:
+        現在の値
+    """
+    col_input, col_btn = st.columns([3, 1])
+    with col_input:
+        value = st.number_input(
+            label,
+            min_value=1,
+            max_value=max(1, max_value),
+            value=min(default_value, max(1, max_value)),
+            key=key,
+            help=help,
+        )
+    with col_btn:
+        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+        if st.button("全件", key=f"{key}_max_btn", use_container_width=True):
+            st.session_state[key] = max_value
+            st.rerun()
+
+    return value
+
+
 def export_to_excel_bytes(exporter, results, **kwargs) -> bytes:
     """Excelエクスポーターを使ってバイト列を生成"""
     buffer = io.BytesIO()

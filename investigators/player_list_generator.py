@@ -93,6 +93,7 @@ class PlayerListGenerator:
         conditions: str = "",
         max_count: int = 50,
         on_progress: Optional[Callable] = None,
+        definition: str = "",
     ) -> list[GeneratedPlayer]:
         """
         プレイヤーリストを0から生成
@@ -110,7 +111,7 @@ class PlayerListGenerator:
             on_progress(1, 3, "LLMにプレイヤーリストを生成中...")
 
         # Step 1: LLMに問い合わせ
-        candidates = await self._query_players(industry, conditions, max_count)
+        candidates = await self._query_players(industry, conditions, max_count, definition=definition)
 
         if on_progress:
             on_progress(2, 3, f"URL検証中（{len(candidates)}件）...")
@@ -134,6 +135,7 @@ class PlayerListGenerator:
         industry: str,
         conditions: str,
         max_count: int,
+        definition: str = "",
     ) -> list[GeneratedPlayer]:
         """LLMにプレイヤーリストを問い合わせ"""
 
@@ -147,9 +149,11 @@ class PlayerListGenerator:
         # 条件セクション（attribute_investigatorのcontext注入パターンを採用）
         conditions_section = f"\n■絞り込み条件\n{safe_conditions}\n" if safe_conditions else ""
 
+        definition_section = f"\n■業界定義・範囲\n{sanitize_input(definition)}\n" if definition else ""
+
         prompt = f"""{safe_industry} 業界において{current_year}年時点でサービスを提供しているプレイヤーを
 網羅的に列挙してください。
-{conditions_section}
+{definition_section}{conditions_section}
 ■重要な制約
 - 確実に存在するサービスのみ。推測や「ありそうな」サービスは不可
 - 公式サイトURLが不明ならofficial_urlを空文字に

@@ -92,6 +92,7 @@ class NewcomerDetector:
         industry: str,
         existing_players: list[str],
         on_progress: Optional[Callable] = None,
+        definition: str = "",
     ) -> list[NewcomerCandidate]:
         """
         新規参入候補を検出
@@ -108,7 +109,7 @@ class NewcomerDetector:
             on_progress(1, 3, "LLMに問い合わせ中...")
 
         # Step 1: LLMに問い合わせ
-        candidates = await self._query_newcomers(industry, existing_players)
+        candidates = await self._query_newcomers(industry, existing_players, definition=definition)
 
         if on_progress:
             on_progress(2, 3, f"URL検証中（{len(candidates)}件）...")
@@ -135,6 +136,7 @@ class NewcomerDetector:
         self,
         industry: str,
         existing_players: list[str],
+        definition: str = "",
     ) -> list[NewcomerCandidate]:
         """LLMに新規参入候補を問い合わせ"""
 
@@ -146,9 +148,11 @@ class NewcomerDetector:
         current_year = datetime.now().year
         existing_text = "\n".join(f"- {p}" for p in safe_players)
 
+        definition_section = f"\n【業界定義・範囲】\n{sanitize_input(definition)}\n" if definition else ""
+
         prompt = f"""{safe_industry} 業界について、{current_year}年時点で日本国内でサービスを提供しているプレイヤーを調査。
 以下の既存リストに含まれていない新規参入企業を特定してください。
-
+{definition_section}
 【既存リスト】（{len(existing_players)}件）
 {existing_text}
 

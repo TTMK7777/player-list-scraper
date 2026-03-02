@@ -27,7 +27,7 @@ from core.investigation_templates import (
 from core.llm_client import LLMClient
 from core.sanitizer import sanitize_input
 from investigators.attribute_investigator import AttributeInvestigator
-from ui.common import display_cost_warning, export_to_excel_bytes, select_sheet_if_multiple
+from ui.common import display_cost_warning, export_to_excel_bytes, select_sheet_if_multiple, number_input_with_max
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +351,7 @@ def _render_investigation_section(
     attributes: list[str],
     batch_size: Optional[int],
     context: str,
+    definition: str = "",
 ) -> None:
     """コスト概算・調査実行・進捗表示セクションをレンダリング。
 
@@ -359,6 +360,7 @@ def _render_investigation_section(
         attributes: 調査対象属性リスト。
         batch_size: テンプレート推奨バッチサイズ（None で自動）。
         context: LLM 判定基準テキスト。
+        definition: 業界定義（任意）。
     """
     players = st.session_state.attr_players
 
@@ -378,13 +380,12 @@ def _render_investigation_section(
 
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
-        check_limit = st.number_input(
+        check_limit = number_input_with_max(
             "調査件数",
-            min_value=1,
             max_value=len(players) if players else 100,
-            value=min(10, len(players)) if players else 10,
-            help="初回は少数でテスト推奨",
+            default_value=10,
             key="attr_check_limit",
+            help="初回は少数でテスト推奨",
         )
 
     with col2:
@@ -442,6 +443,7 @@ def _render_investigation_section(
                 batch_size=effective_batch,
                 on_progress=on_progress,
                 context=context,
+                definition=definition,
             ))
 
             st.session_state.attr_results = results
@@ -525,8 +527,8 @@ def _render_results_section(attributes: list[str]) -> None:
 # ---------------------------------------------------------------------------
 # メインレンダー関数（オーケストレーター）
 # ---------------------------------------------------------------------------
-def render_investigation_tab(industry: str) -> None:
-    """汎用調査タブのUIをレンダリング。
+def render_investigation_tab(industry: str, definition: str = "") -> None:
+    """カテゴリチェック（汎用調査）タブのUIをレンダリング。
 
     テンプレート選択/管理 + プレイヤー入力 + 調査実行 + 結果表示の
     4セクション構成。各セクションはサブ関数に委譲し、本関数は
@@ -534,8 +536,9 @@ def render_investigation_tab(industry: str) -> None:
 
     Args:
         industry: 対象業界名。
+        definition: 業界定義（任意）。
     """
-    st.subheader("📊 汎用調査")
+    st.subheader("📊 カテゴリチェック")
 
     st.info("プレイヤーの**属性（○/×）**をAIが一括調査します。テンプレートを選択するか、カスタムで属性を定義してください。")
 
@@ -553,7 +556,7 @@ def render_investigation_tab(industry: str) -> None:
     _render_player_input_section()
 
     # セクション3: コスト概算 & 調査実行
-    _render_investigation_section(industry, attributes, batch_size, context)
+    _render_investigation_section(industry, attributes, batch_size, context, definition=definition)
 
     # セクション4: 結果表示 + エクスポート
     _render_results_section(attributes)

@@ -2,7 +2,63 @@
 
 > **最終更新**: 2026-03-02
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.6.1
+> **バージョン**: v7.0
+
+## セッション: 2026-03-02 (4)
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v7.0: UI大改修 — タブ統合(6→4) + 定義フィールド + 全件ボタン |
+| **変更ファイル** | 10ファイル変更 + 1新規 + 2アーカイブ（+115行 -57行 + 884行新規） |
+| **テスト** | 405件全パス（回帰なし） |
+| **品質ゲート** | collaborative — 取締役会 条件付きGo（CTO指摘2点反映済み） |
+| **ステータス** | 完了 |
+
+### 変更詳細
+
+#### 1. タブ再編（6→4タブ）(`app_v5.py`)
+- 正誤チェック + 新規参入検出 + リスト生成 → **📋 プレイヤーの最新動向** に統合
+- 汎用調査 → **📊 カテゴリチェック** にラベル変更
+- 店舗調査（従来版） → **🏪 店舗・教室調査** にラベル変更
+- 3段階チェック → そのまま
+
+#### 2. 統合タブ新規作成 (`ui/player_trend_tab.py` NEW, 884行)
+- 3サブタブ構成: 変更点調査 / 新規参入検出 / 最新版リスト作成
+- 共有Excelアップロード（サブタブ上部）
+- Sub-tab 3: コンパイルロジック（WITHDRAWAL/MERGERのみ除外、他はデフォルトキープ）
+- `st.data_editor` で最終調整 → Excel/CSVエクスポート
+- セッション状態は `trend_` プレフィックスで衝突回避
+
+#### 3. サイドバー改修 (`app_v5.py`)
+- 業界 help テキストを入力欄の外に移動（`st.caption()`）
+- **定義フィールド** 新設（`st.text_area`, 200文字上限）
+- 定義のキャプション: 「仮でもOK」の案内付き
+
+#### 4. 定義パラメータ追加（4 investigator）
+- `player_validator.py`, `newcomer_detector.py`, `player_list_generator.py`, `attribute_investigator.py`
+- 全メソッドに `definition: str = ""` 追加（後方互換）
+- LLMプロンプトに `【業界定義・範囲】` セクションとして注入
+
+#### 5. 全件ボタン (`ui/common.py`)
+- `number_input_with_max()` ヘルパー関数追加
+- 2カラム: [number_input | 全件ボタン]
+- 4タブ（trend, attribute, workflow, store）の全チェック件数入力に適用
+
+#### 6. 旧ファイルアーカイブ
+- `ui/newcomer_tab.py` → `archive/ui/newcomer_tab.py`
+- `ui/generator_tab.py` → `archive/ui/generator_tab.py`
+- investigator本体はそのまま維持（workflow_tab等で使用）
+
+### 未完了・継続課題
+- [ ] 正誤チェック解析失敗の対策実装（ログ確認後）
+- [R] `excel_handler.py` SRP違反解消
+- [E] テンプレートIDのASCIIスラッグ化
+- [E] カテゴリ値対応（boolean以外の多値分類）
+- [E] LLMClient の AsyncContextManager 化
+- [E] `player_trend_tab.py` のサブタブ分離ファイル化（規模が大きくなった場合）
+
+---
 
 ## セッション: 2026-03-02 (3)
 

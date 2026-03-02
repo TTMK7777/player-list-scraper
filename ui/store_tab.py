@@ -20,7 +20,7 @@ from core.excel_handler import ExcelHandler, StoreInvestigationExporter
 from core.llm_client import LLMClient, DEFAULT_MODEL
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
-from ui.common import display_progress_log, display_cost_estimate, select_sheet_if_multiple
+from ui.common import display_progress_log, display_cost_estimate, select_sheet_if_multiple, number_input_with_max
 
 
 # ====================================
@@ -215,6 +215,7 @@ def render_store_tab():
     """店舗調査タブのUIをレンダリング"""
 
     st.info("企業の**店舗・教室数**を都道府県別に調査します。AI調査（推奨）またはスクレイピングで取得します。")
+    st.caption("🏪 店舗・教室調査")
 
     # 業界設定（store調査のコンテキスト用）
     industry = st.text_input(
@@ -350,12 +351,10 @@ def render_store_tab():
     # 調査実行
     col1, col2 = st.columns([1, 3])
     with col1:
-        check_limit = st.number_input(
+        check_limit = number_input_with_max(
             "調査件数",
-            min_value=1,
             max_value=len(st.session_state.store_companies) if st.session_state.store_companies else 100,
-            value=min(5, len(st.session_state.store_companies)) if st.session_state.store_companies else 5,
-            help="APIコスト削減のため、最初は少数でテストしてください",
+            default_value=5,
             key="store_check_limit",
         )
 

@@ -126,6 +126,7 @@ class AttributeInvestigator:
         concurrency: int = 2,
         delay_seconds: float = 1.5,
         context: str = "",
+        definition: str = "",
     ) -> list[AttributeInvestigationResult]:
         """バッチ単位で属性調査を実行
 
@@ -160,7 +161,7 @@ class AttributeInvestigator:
             async with semaphore:
                 try:
                     batch_results = await self._investigate_single_batch(
-                        batch, attributes, industry, context=context
+                        batch, attributes, industry, context=context, definition=definition
                     )
                     results.extend(batch_results)
                 except Exception as e:
@@ -193,6 +194,7 @@ class AttributeInvestigator:
         attributes: list[str],
         industry: Optional[str] = None,
         context: str = "",
+        definition: str = "",
     ) -> list[AttributeInvestigationResult]:
         """1バッチ分の属性調査を実行（複数社まとめて1回のLLM呼び出し）
 
@@ -209,7 +211,7 @@ class AttributeInvestigator:
         llm = self._get_llm_client()
 
         # プロンプト生成
-        prompt = self._build_batch_prompt(players, attributes, industry, context=context)
+        prompt = self._build_batch_prompt(players, attributes, industry, context=context, definition=definition)
 
         # LLM呼び出し（同期→非同期ラッパー）
         loop = asyncio.get_running_loop()
@@ -227,6 +229,7 @@ class AttributeInvestigator:
         attributes: list[str],
         industry: Optional[str] = None,
         context: str = "",
+        definition: str = "",
     ) -> str:
         """バッチプロンプトを生成
 
@@ -257,6 +260,7 @@ class AttributeInvestigator:
         attributes_text = ", ".join(attributes)
 
         industry_text = f"（{safe_industry}業界）" if safe_industry else ""
+        definition_section = f"\n■業界定義・範囲\n{sanitize_input(definition)}\n" if definition else ""
 
         # コンテキストセクション（指定時のみ挿入）
         context_section = f"\n■判定基準\n{context}\n" if context else ""
@@ -265,7 +269,7 @@ class AttributeInvestigator:
 
 ■調査対象
 {players_text}
-{context_section}
+{definition_section}{context_section}
 ■調査属性: {attributes_text}
 
 【出力形式】JSON（必ずこの形式で出力してください）

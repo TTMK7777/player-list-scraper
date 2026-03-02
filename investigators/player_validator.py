@@ -110,6 +110,7 @@ class PlayerValidator:
         official_url: str = "",
         company_name: str = "",
         industry: Optional[str] = None,
+        definition: str = "",
     ) -> ValidationResult:
         """
         単一プレイヤーの正誤チェック
@@ -129,7 +130,7 @@ class PlayerValidator:
 
             # Step 2: LLMで最新情報を調査
             llm_response = await self._query_latest_info(
-                player_name, official_url, company_name, industry
+                player_name, official_url, company_name, industry, definition
             )
 
             # Step 3: レスポンスを解析
@@ -157,6 +158,7 @@ class PlayerValidator:
         on_progress: Callable[[int, int, str], None] = None,
         concurrency: Optional[int] = None,
         delay_seconds: float = 1.0,
+        definition: str = "",
     ) -> list[ValidationResult]:
         """
         複数プレイヤーをバッチチェック
@@ -191,6 +193,7 @@ class PlayerValidator:
                     official_url=player.official_url,
                     company_name=player.company_name,
                     industry=industry,
+                    definition=definition,
                 )
 
                 # API制限対策の遅延
@@ -233,6 +236,7 @@ class PlayerValidator:
         official_url: str,
         company_name: str,
         industry: Optional[str],
+        definition: str = "",
     ) -> str:
         """LLMに最新情報を問い合わせ"""
 
@@ -243,12 +247,13 @@ class PlayerValidator:
         safe_url = self._sanitize_input(official_url)
 
         industry_context = f"（{safe_industry}業界）" if safe_industry else ""
+        definition_context = f"\n【業界定義・範囲】\n{sanitize_input(definition)}\n" if definition else ""
         company_context = f"（運営会社: {safe_company_name}）" if safe_company_name else ""
         url_context = f"[公式URL] {safe_url}" if safe_url else ""
 
         prompt = f"""
 「{safe_player_name}」{industry_context}{company_context}の最新情報を調査してください。
-
+{definition_context}
 {url_context}
 
 【確認事項】

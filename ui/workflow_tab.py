@@ -26,10 +26,10 @@ from core.llm_client import LLMClient
 from core.excel_handler import ExcelHandler
 from investigators.player_validator import PlayerValidator
 from investigators.base import AlertLevel, ValidationResult
-from ui.common import display_cost_estimate, select_sheet_if_multiple
+from ui.common import display_cost_estimate, select_sheet_if_multiple, number_input_with_max
 
 
-def render_workflow_tab(industry: str):
+def render_workflow_tab(industry: str, definition: str = ""):
     """3段階チェックタブのUIをレンダリング"""
 
     st.subheader("3段階チェック体制")
@@ -135,11 +135,10 @@ def render_workflow_tab(industry: str):
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        check_limit = st.number_input(
+        check_limit = number_input_with_max(
             "チェック件数",
-            min_value=1,
             max_value=len(players) if players else 100,
-            value=min(10, len(players)) if players else 10,
+            default_value=10,
             key="workflow_check_limit",
         )
 
@@ -198,6 +197,7 @@ def render_workflow_tab(industry: str):
             results = run_async(validator.validate_batch(
                 target_players,
                 industry=industry_normalized,
+                definition=definition,
                 on_progress=on_progress,
                 concurrency=2,
                 delay_seconds=1.5,

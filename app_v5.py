@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-プレイヤーリスト調査システム GUI v6.3
+プレイヤーリスト調査システム GUI v7.0
 =====================================
-v3（店舗調査）とv4（正誤チェック）を統合。
-AI調査をデフォルトとし、スクレイピングはオプションとして併存。
+プレイヤーの最新動向（正誤チェック+新規参入+リスト作成）を統合タブで提供。
 
 【機能】
-- プレイヤーリスト正誤チェック
+- プレイヤーの最新動向（変更点調査 + 新規参入検出 + 最新版リスト作成）
+- カテゴリチェック（属性調査）
 - 店舗・教室調査（AI調査 推奨 + スクレイピング オプション）
-- 属性調査（カテゴリ/ブランド）
-- 新規参入検出
 - 3段階チェック（ワークフロー）
 
 【使用方法】
@@ -34,15 +32,13 @@ from core.llm_client import is_api_available, DEFAULT_MODEL
 # ロギング設定（モジュール読み込み時に1度だけ実行）
 setup_logging()
 from ui.attribute_tab import render_investigation_tab
-from ui.newcomer_tab import render_newcomer_tab
+from ui.player_trend_tab import render_player_trend_tab
 from ui.store_tab import render_store_tab
-from ui.validation_tab import render_validation_tab
 from ui.workflow_tab import render_workflow_tab
-from ui.generator_tab import render_generator_tab
 
 # ページ設定
 st.set_page_config(
-    page_title="プレイヤーリスト調査システム v6.3",
+    page_title="プレイヤーリスト調査システム v7.0",
     page_icon="🔍",
     layout="wide",
 )
@@ -179,8 +175,8 @@ def check_password() -> bool:
 # ====================================
 def main():
     check_password()
-    st.title("🔍 プレイヤーリスト調査システム v6.3")
-    st.caption("正誤チェック + 汎用調査 + 店舗調査 + 新規参入検出 + 3段階チェック | AI調査（推奨）")
+    st.title("🔍 プレイヤーリスト調査システム v7.0")
+    st.caption("プレイヤーの最新動向 + カテゴリチェック + 店舗・教室調査 + 3段階チェック | AI調査（推奨）")
 
     # ====================================
     # サイドバー
@@ -206,8 +202,16 @@ def main():
         industry = st.text_input(
             "対象業界",
             placeholder="例: クレジットカード、動画配信サービス",
-            help="正誤チェック・汎用調査・3段階チェックで使用します。設定すると検索精度が向上するため、入力を推奨します。",
         )
+        st.caption("⚡ 設定すると検索精度が向上します（最新動向・カテゴリチェック・3段階チェックで使用）")
+
+        definition = st.text_area(
+            "定義（任意）",
+            placeholder="例: 月額課金制の映像ストリーミング。無料動画共有は除外",
+            height=80,
+            max_chars=200,
+        )
+        st.caption("💡 仮でもOK。業界の範囲や除外条件を指定するとAI判定の精度が上がります")
 
         st.divider()
 
@@ -219,12 +223,10 @@ def main():
     function_type = st.radio(
         "機能タイプ",
         [
-            "🔍 正誤チェック",
-            "📊 汎用調査",
-            "🏪 店舗調査（従来版）",
-            "🆕 新規参入検出",
+            "📋 プレイヤーの最新動向",
+            "📊 カテゴリチェック",
+            "🏪 店舗・教室調査",
             "📋 3段階チェック",
-            "🆕 リスト生成",
         ],
         horizontal=True,
         label_visibility="collapsed",
@@ -235,18 +237,14 @@ def main():
     # ====================================
     # 機能分岐（各タブモジュールに委譲）
     # ====================================
-    if "汎用調査" in function_type:
-        render_investigation_tab(industry=industry)
-    elif "新規参入検出" in function_type:
-        render_newcomer_tab()
-    elif "3段階チェック" in function_type:
-        render_workflow_tab(industry=industry)
-    elif "正誤チェック" in function_type:
-        render_validation_tab(industry=industry)
-    elif "店舗調査" in function_type:
+    if "最新動向" in function_type:
+        render_player_trend_tab(industry=industry, definition=definition)
+    elif "カテゴリチェック" in function_type:
+        render_investigation_tab(industry=industry, definition=definition)
+    elif "店舗・教室調査" in function_type:
         render_store_tab()
-    elif "リスト生成" in function_type:
-        render_generator_tab()
+    elif "3段階チェック" in function_type:
+        render_workflow_tab(industry=industry, definition=definition)
 
 
 if __name__ == "__main__":
