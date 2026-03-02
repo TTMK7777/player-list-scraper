@@ -2,7 +2,62 @@
 
 > **最終更新**: 2026-03-02
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.5.1
+> **バージョン**: v6.6
+
+## セッション: 2026-03-02 (2)
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v6.6: 複数シート対応 + DEFAULT_MODEL(pro)一元化 + UI改善 |
+| **変更ファイル** | 17ファイル（+97行 -56行） |
+| **テスト** | 405件全パス（回帰なし） |
+| **品質ゲート** | moderate — プラン承認済み |
+| **ステータス** | 完了 |
+
+### 変更詳細
+
+#### 1. DEFAULT_MODEL 定数化 (`core/llm_client.py`)
+- `DEFAULT_MODEL = "gemini-2.5-pro"` 定数を新設
+- `_call_gemini()` のフォールバック `"gemini-2.5-flash"` → `DEFAULT_MODEL` に置換
+- **全 investigator（5個）+ store_scraper_v3 + scripts** がこの定数を参照
+- コスト増はユーザー了承済み（精度向上が優先）
+
+#### 2. 複数シート対応 (`core/excel_handler.py`)
+- `get_sheet_names(file_path)` 静的メソッド追加（read_only で高速にシート名一覧取得）
+- `load()` に `sheet_name` パラメータ追加（未指定時は従来通り active シート）
+- 存在しないシート名指定時は `ValueError` 送出
+
+#### 3. シート選択ヘルパー (`ui/common.py`)
+- `select_sheet_if_multiple(file_path, key_prefix)` 追加
+- 複数シート時のみ selectbox 表示、単一シートなら None を返す
+
+#### 4. 5タブにシート選択UI追加
+- validation_tab, newcomer_tab, store_tab, workflow_tab, attribute_tab
+- 各タブの Excel アップロード処理に2行追加（`select_sheet_if_multiple` + `load(sheet_name=)`)
+
+#### 5. 店舗調査モード選択UI簡略化 (`ui/store_tab.py`)
+- 「AI調査（高速）/ AI調査（精密）」→「AI調査」に統合（DEFAULT_MODEL で一本化）
+- `ai_model` 変数、`st.warning` 精密モード注意事項を削除
+- `_run_investigation()` から `ai_model` 引数を削除
+
+#### 6. UI表示改善 (`app_v5.py`)
+- API接続表示: `✅ Gemini: 接続OK` → `✅ Gemini: 接続OK（モデル: gemini-2.5-pro）`
+- 業界設定 help: 「入力を推奨します」のメモ追加
+
+#### 7. テスト修正 (`tests/test_store_investigator.py`)
+- `test_init` のデフォルトモデルアサーション値を `gemini-2.5-pro` に更新
+
+### 残課題
+- [ ] 正誤チェック解析失敗の対策実装（ログ確認後）
+- [ ] 複数シートExcel（生産性AIプレイヤーリスト.xlsx）でシート選択→正誤チェック実行を目視確認
+- [ ] 単一シートExcelで従来動作が維持されることを目視確認
+- (継続) [R] `excel_handler.py` SRP違反解消
+- (継続) [E] テンプレートIDのASCIIスラッグ化
+- (継続) [E] カテゴリ値対応（boolean以外の多値分類）
+- (継続) [E] LLMClient の AsyncContextManager 化
+
+---
 
 ## セッション: 2026-03-02
 

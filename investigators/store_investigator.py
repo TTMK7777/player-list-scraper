@@ -27,6 +27,7 @@ from investigators.base import StoreInvestigationResult
 from core.async_helpers import optimal_concurrency
 from core.sanitizer import sanitize_input
 from core.safe_parse import safe_float
+from core.llm_client import DEFAULT_MODEL
 from core.llm_schemas import StoreInvestigationLLMResponse, parse_llm_response
 
 
@@ -100,7 +101,7 @@ class StoreInvestigator:
     def __init__(
         self,
         llm_client=None,
-        model: str = "gemini-2.5-flash",
+        model: str = DEFAULT_MODEL,
     ):
         """
         Args:

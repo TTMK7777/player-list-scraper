@@ -34,6 +34,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from investigators.base import AttributeInvestigationResult
 from core.sanitizer import sanitize_input
 from core.attribute_presets import ATTRIBUTE_PRESETS
+from core.llm_client import DEFAULT_MODEL
 from core.llm_schemas import AttributeItemLLMResponse, AttributeBatchLLMResponse, parse_llm_response
 
 
@@ -51,7 +52,7 @@ class AttributeInvestigator:
     def __init__(
         self,
         llm_client=None,
-        model: str = "gemini-2.5-flash",
+        model: str = DEFAULT_MODEL,
     ):
         """
         Args:

@@ -32,7 +32,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from core.llm_client import LLMClient
+from core.llm_client import LLMClient, DEFAULT_MODEL
 
 from core.postal_prefecture import POSTAL_PREFIX_MAP, extract_prefecture_from_postal
 
@@ -1230,7 +1230,7 @@ class AIInferenceStrategy(ScrapingStrategy):
 """
 
         try:
-            text = llm.call(prompt, model="gemini-2.5-flash")
+            text = llm.call(prompt, model=DEFAULT_MODEL)
             json_match = re.search(r'\{[\s\S]*\}', text)
             if json_match:
                 return json.loads(json_match.group())
@@ -1333,7 +1333,7 @@ class AIInferenceStrategy(ScrapingStrategy):
 
         try:
             # Gemini の検索機能を活用
-            text = llm.call(prompt, model="gemini-2.5-flash")
+            text = llm.call(prompt, model=DEFAULT_MODEL)
             json_match = re.search(r'\[[\s\S]*\]', text)
             if json_match:
                 items = json.loads(json_match.group())

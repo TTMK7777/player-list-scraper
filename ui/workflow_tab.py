@@ -26,7 +26,7 @@ from core.llm_client import LLMClient
 from core.excel_handler import ExcelHandler
 from investigators.player_validator import PlayerValidator
 from investigators.base import AlertLevel, ValidationResult
-from ui.common import display_cost_estimate
+from ui.common import display_cost_estimate, select_sheet_if_multiple
 
 
 def render_workflow_tab(industry: str):
@@ -121,8 +121,9 @@ def render_workflow_tab(industry: str):
             temp_path = temp_dir / uploaded_file.name
             temp_path.write_bytes(uploaded_file.getvalue())
 
+            selected_sheet = select_sheet_if_multiple(temp_path, "workflow")
             handler = ExcelHandler()
-            players = handler.load(temp_path)
+            players = handler.load(temp_path, sheet_name=selected_sheet)
             st.session_state.workflow_players = players
             st.success(f"{len(players)}件のプレイヤーを読み込みました")
 

@@ -10,9 +10,12 @@ import io
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
+
+from core.excel_handler import ExcelHandler
 
 # USD → JPY 換算レート（固定）
 USD_TO_JPY = 150
@@ -98,6 +101,26 @@ def display_filter_multiselect(
         default=default,
         key=key,
     )
+
+
+def select_sheet_if_multiple(file_path, key_prefix: str) -> Optional[str]:
+    """複数シートがある場合にselectboxを表示、単一シートならNoneを返す
+
+    Args:
+        file_path: Excelファイルパス
+        key_prefix: Streamlit widget key のプレフィックス
+
+    Returns:
+        選択されたシート名、または単一シートの場合は None
+    """
+    sheet_names = ExcelHandler.get_sheet_names(file_path)
+    if len(sheet_names) > 1:
+        return st.selectbox(
+            "読み込むシートを選択",
+            sheet_names,
+            key=f"{key_prefix}_sheet_select",
+        )
+    return None
 
 
 def export_to_excel_bytes(exporter, results, **kwargs) -> bytes:

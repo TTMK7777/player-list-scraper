@@ -29,7 +29,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.logger import setup_logging
-from core.llm_client import is_api_available
+from core.llm_client import is_api_available, DEFAULT_MODEL
 
 # ロギング設定（モジュール読み込み時に1度だけ実行）
 setup_logging()
@@ -193,7 +193,7 @@ def main():
 
         st.subheader("🔑 API接続")
         if api_available:
-            st.success("✅ Gemini: 接続OK")
+            st.success(f"✅ Gemini: 接続OK（モデル: {DEFAULT_MODEL}）")
         else:
             st.error("❌ GOOGLE_API_KEY が設定されていません")
             st.info("~/.env.local またはStreamlit Cloud の Secrets に GOOGLE_API_KEY を設定してください")
@@ -206,7 +206,7 @@ def main():
         industry = st.text_input(
             "対象業界",
             placeholder="例: クレジットカード、動画配信サービス",
-            help="正誤チェック・汎用調査・3段階チェックで使用します",
+            help="正誤チェック・汎用調査・3段階チェックで使用します。設定すると検索精度が向上するため、入力を推奨します。",
         )
 
         st.divider()

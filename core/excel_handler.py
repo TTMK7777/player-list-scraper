@@ -74,12 +74,29 @@ class ExcelHandler:
         self.header_row = 1
         self.column_map: dict[str, int] = {}  # 列名 -> 列インデックス
 
-    def load(self, file_path: str | Path) -> list[PlayerData]:
+    @staticmethod
+    def get_sheet_names(file_path: str | Path) -> list[str]:
+        """Excelファイルのシート名一覧を返す
+
+        Args:
+            file_path: Excelファイルパス
+
+        Returns:
+            list[str]: シート名のリスト
+        """
+        wb = openpyxl.load_workbook(file_path, read_only=True)
+        try:
+            return wb.sheetnames
+        finally:
+            wb.close()
+
+    def load(self, file_path: str | Path, sheet_name: str | None = None) -> list[PlayerData]:
         """
         Excelファイルを読み込み、プレイヤーデータのリストを返す
 
         Args:
             file_path: Excelファイルパス
+            sheet_name: 読み込むシート名（未指定時はアクティブシート）
 
         Returns:
             list[PlayerData]: プレイヤーデータのリスト
@@ -90,7 +107,12 @@ class ExcelHandler:
 
         self.workbook = openpyxl.load_workbook(file_path, data_only=True)
         try:
-            self.sheet = self.workbook.active
+            if sheet_name:
+                if sheet_name not in self.workbook.sheetnames:
+                    raise ValueError(f"シート '{sheet_name}' が見つかりません")
+                self.sheet = self.workbook[sheet_name]
+            else:
+                self.sheet = self.workbook.active
 
             # ヘッダー行を探す
             self._find_header_row()

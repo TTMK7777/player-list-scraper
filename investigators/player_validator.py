@@ -50,7 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.async_helpers import optimal_concurrency
-from core.llm_client import LLMClient, get_default_client
+from core.llm_client import LLMClient, get_default_client, DEFAULT_MODEL
 from core.excel_handler import PlayerData
 from core.sanitizer import sanitize_input, verify_url
 from core.safe_parse import safe_float
@@ -94,7 +94,7 @@ class PlayerValidator:
     def __init__(
         self,
         llm_client: LLMClient = None,
-        model: str = "gemini-2.5-flash",
+        model: str = DEFAULT_MODEL,
     ):
         """
         Args:

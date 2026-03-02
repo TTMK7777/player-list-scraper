@@ -17,10 +17,10 @@ import streamlit as st
 
 from core.async_helpers import run_async
 from core.excel_handler import ExcelHandler, StoreInvestigationExporter
-from core.llm_client import LLMClient
+from core.llm_client import LLMClient, DEFAULT_MODEL
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
-from ui.common import display_progress_log, display_cost_estimate
+from ui.common import display_progress_log, display_cost_estimate, select_sheet_if_multiple
 
 
 # ====================================
@@ -31,7 +31,6 @@ async def _run_investigation(
     mode: InvestigationMode,
     progress_container,
     status_container,
-    ai_model: str = "gemini-2.5-flash",
 ) -> list[StoreInvestigationResult]:
     """店舗調査を実行"""
 
@@ -42,13 +41,12 @@ async def _run_investigation(
         logs.append(log_msg)
         display_progress_log(logs, progress_container)
 
-    model_label = "精密" if ai_model == "gemini-2.5-pro" else "高速"
-    status_container.info(f"🏪 {len(companies)}件の企業を調査中... (モード: {model_label})")
+    status_container.info(f"🏪 {len(companies)}件の企業を調査中... (モデル: {DEFAULT_MODEL})")
 
     try:
         # 店舗調査は短時間で変わらないのでキャッシュ有効
         llm = LLMClient(enable_cache=True)
-        investigator = StoreInvestigator(llm_client=llm, model=ai_model)
+        investigator = StoreInvestigator(llm_client=llm)
 
         results = await investigator.investigate_batch(
             companies,
@@ -239,8 +237,7 @@ def render_store_tab():
     mode_option = st.radio(
         "調査モード",
         [
-            "🤖 AI調査（高速）",
-            "🔬 AI調査（精密）",
+            "🤖 AI調査",
             "🔗 スクレイピング",
             "🔄 ハイブリッド（AI + スクレイピング補完）",
         ],
@@ -248,22 +245,9 @@ def render_store_tab():
         label_visibility="collapsed",
     )
 
-    # モード変換 & モデル選択
-    ai_model = "gemini-2.5-flash"
-
-    if "AI調査（高速）" in mode_option:
+    # モード変換
+    if "AI調査" in mode_option:
         investigation_mode = InvestigationMode.AI
-        ai_model = "gemini-2.5-flash"
-    elif "AI調査（精密）" in mode_option:
-        investigation_mode = InvestigationMode.AI
-        ai_model = "gemini-2.5-pro"
-        st.warning(
-            "⏳ **精密モード（gemini-2.5-pro）の注意事項**\n\n"
-            "- 高速モードより応答に時間がかかります\n"
-            "- コストが高くなります\n"
-            "- 通常モードで `?` が多い場合のみ推奨\n\n"
-            "まずは「AI調査（高速）」でテストしてください。"
-        )
     elif "スクレイピング" in mode_option:
         investigation_mode = InvestigationMode.SCRAPING
     else:
@@ -295,8 +279,9 @@ def render_store_tab():
                 temp_path = temp_dir / uploaded_file.name
                 temp_path.write_bytes(uploaded_file.getvalue())
 
+                selected_sheet = select_sheet_if_multiple(temp_path, "store")
                 handler = ExcelHandler()
-                players = handler.load(temp_path)
+                players = handler.load(temp_path, sheet_name=selected_sheet)
 
                 companies = []
                 for p in players:
@@ -415,7 +400,6 @@ def render_store_tab():
                 mode=investigation_mode,
                 progress_container=progress_container,
                 status_container=status_container,
-                ai_model=ai_model,
             ))
 
             st.session_state.store_results = results

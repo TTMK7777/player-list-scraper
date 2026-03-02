@@ -50,10 +50,10 @@ async def test_single_validation():
 
     # バリデーター作成
     try:
-        from core.llm_client import LLMClient
+        from core.llm_client import LLMClient, DEFAULT_MODEL
         llm = LLMClient()
-        validator = PlayerValidator(llm_client=llm, model="gemini-2.5-flash")
-        print("\n📌 使用API: Gemini (gemini-2.5-flash)")
+        validator = PlayerValidator(llm_client=llm, model=DEFAULT_MODEL)
+        print(f"\n📌 使用API: Gemini ({DEFAULT_MODEL})")
     except Exception as e:
         print(f"\n❌ バリデーター作成エラー: {e}")
         return

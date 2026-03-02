@@ -35,6 +35,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from investigators.base import NewcomerCandidate
 from core.sanitizer import sanitize_input, sanitize_url, verify_url
+from core.llm_client import DEFAULT_MODEL
 from core.llm_schemas import NewcomerCandidateLLMResponse, parse_llm_response
 
 
@@ -69,7 +70,7 @@ class NewcomerDetector:
     def __init__(
         self,
         llm_client=None,
-        model: str = "gemini-2.5-flash",
+        model: str = DEFAULT_MODEL,
     ):
         """
         Args:

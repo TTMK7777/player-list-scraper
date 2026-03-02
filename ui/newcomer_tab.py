@@ -19,7 +19,7 @@ from core.excel_handler import ExcelHandler
 from core.llm_client import LLMClient
 from core.sanitizer import sanitize_input
 from investigators.newcomer_detector import NewcomerDetector
-from ui.common import display_verification_badge, display_cost_estimate
+from ui.common import display_verification_badge, display_cost_estimate, select_sheet_if_multiple
 
 
 def render_newcomer_tab():
@@ -49,8 +49,9 @@ def render_newcomer_tab():
                 temp_path = temp_dir / uploaded_file.name
                 temp_path.write_bytes(uploaded_file.getvalue())
 
+                selected_sheet = select_sheet_if_multiple(temp_path, "newcomer")
                 handler = ExcelHandler()
-                players_data = handler.load(temp_path)
+                players_data = handler.load(temp_path, sheet_name=selected_sheet)
 
                 existing_names = [p.player_name for p in players_data]
                 st.session_state.existing_players = existing_names

@@ -27,7 +27,7 @@ from core.investigation_templates import (
 from core.llm_client import LLMClient
 from core.sanitizer import sanitize_input
 from investigators.attribute_investigator import AttributeInvestigator
-from ui.common import display_cost_warning, export_to_excel_bytes
+from ui.common import display_cost_warning, export_to_excel_bytes, select_sheet_if_multiple
 
 
 # ---------------------------------------------------------------------------
@@ -299,8 +299,9 @@ def _render_player_input_section() -> None:
                 temp_path = temp_dir / uploaded_file.name
                 temp_path.write_bytes(uploaded_file.getvalue())
 
+                selected_sheet = select_sheet_if_multiple(temp_path, "attr")
                 handler = ExcelHandler()
-                players_data = handler.load(temp_path)
+                players_data = handler.load(temp_path, sheet_name=selected_sheet)
 
                 players = [
                     {

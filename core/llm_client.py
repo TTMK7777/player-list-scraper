@@ -6,8 +6,8 @@ LLM APIクライアント
 Gemini API 専用クライアント（Google検索グラウンディング対応）
 
 【対応モデル】
-- gemini-2.5-flash（高速、デフォルト）
-- gemini-2.5-pro（精密）
+- gemini-2.5-pro（精密、デフォルト）
+- gemini-2.5-flash（高速）
 - gemini-3-flash / gemini-3-pro
 """
 
@@ -23,6 +23,10 @@ from dotenv import load_dotenv
 load_dotenv(Path.home() / ".env.local", override=True)
 
 
+# デフォルトモデル（全 investigator / store_scraper / scripts から参照）
+DEFAULT_MODEL = "gemini-2.5-pro"
+
+
 class LLMClient:
     """
     Gemini API クライアント
@@ -30,7 +34,7 @@ class LLMClient:
     【使用例】
     ```python
     client = LLMClient()
-    response = client.call("質問内容", model="gemini-2.5-flash")
+    response = client.call("質問内容", model="gemini-2.5-pro")
 
     # Google検索グラウンディング付き（最新情報が必要な場合）
     response = client.call("質問内容", use_search=True)
@@ -83,7 +87,7 @@ class LLMClient:
 
         Args:
             prompt: ユーザープロンプト
-            model: モデル名（未指定時は gemini-2.5-flash）
+            model: モデル名（未指定時は DEFAULT_MODEL）
             temperature: 生成温度
             max_tokens: 最大トークン数
             system_prompt: システムプロンプト（オプション）
@@ -121,7 +125,7 @@ class LLMClient:
     ) -> str:
         """Gemini API 呼び出し（google.genai パッケージ使用）"""
 
-        model = model or "gemini-2.5-flash"
+        model = model or DEFAULT_MODEL
 
         # モデル名を正規化
         if model in self.GEMINI_MODELS:

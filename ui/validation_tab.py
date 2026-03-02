@@ -19,7 +19,7 @@ from core.excel_handler import ExcelHandler, PlayerData
 from core.llm_client import LLMClient
 from investigators.base import AlertLevel, ValidationResult
 from investigators.player_validator import PlayerValidator
-from ui.common import display_progress_log, display_filter_multiselect, display_cost_estimate
+from ui.common import display_progress_log, display_filter_multiselect, display_cost_estimate, select_sheet_if_multiple
 
 
 # ====================================
@@ -241,8 +241,9 @@ def render_validation_tab(industry: str):
             temp_path = temp_dir / uploaded_file.name
             temp_path.write_bytes(uploaded_file.getvalue())
 
+            selected_sheet = select_sheet_if_multiple(temp_path, "val")
             handler = ExcelHandler()
-            players = handler.load(temp_path)
+            players = handler.load(temp_path, sheet_name=selected_sheet)
             st.session_state.val_players = players
 
             st.success(f"✅ {len(players)}件のプレイヤーを読み込みました")
