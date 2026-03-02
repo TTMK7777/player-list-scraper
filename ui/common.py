@@ -103,23 +103,25 @@ def display_filter_multiselect(
     )
 
 
-def select_sheet_if_multiple(file_path, key_prefix: str) -> Optional[str]:
-    """複数シートがある場合にselectboxを表示、単一シートならNoneを返す
+def select_sheet_if_multiple(file_path, key_prefix: str) -> Optional[list[str]]:
+    """複数シートがある場合にmultiselectを表示、単一シートならNoneを返す
 
     Args:
         file_path: Excelファイルパス
         key_prefix: Streamlit widget key のプレフィックス
 
     Returns:
-        選択されたシート名、または単一シートの場合は None
+        選択されたシート名のリスト、または単一シートの場合は None
     """
     sheet_names = ExcelHandler.get_sheet_names(file_path)
     if len(sheet_names) > 1:
-        return st.selectbox(
-            "読み込むシートを選択",
+        selected = st.multiselect(
+            "読み込むシートを選択（複数選択可）",
             sheet_names,
+            default=[sheet_names[0]],
             key=f"{key_prefix}_sheet_select",
         )
+        return selected if selected else None
     return None
 
 

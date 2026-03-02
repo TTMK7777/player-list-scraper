@@ -301,7 +301,7 @@ def _render_player_input_section() -> None:
 
                 selected_sheet = select_sheet_if_multiple(temp_path, "attr")
                 handler = ExcelHandler()
-                players_data = handler.load(temp_path, sheet_name=selected_sheet)
+                players_data = handler.load_multiple(temp_path, sheet_names=selected_sheet)
 
                 players = [
                     {

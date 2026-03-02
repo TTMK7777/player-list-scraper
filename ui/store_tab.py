@@ -281,7 +281,7 @@ def render_store_tab():
 
                 selected_sheet = select_sheet_if_multiple(temp_path, "store")
                 handler = ExcelHandler()
-                players = handler.load(temp_path, sheet_name=selected_sheet)
+                players = handler.load_multiple(temp_path, sheet_names=selected_sheet)
 
                 companies = []
                 for p in players:

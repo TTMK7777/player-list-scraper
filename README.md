@@ -183,6 +183,7 @@ pytest tests/ --cov=. --cov-report=html
 
 | Ver | 日付 | 変更内容 |
 |-----|------|---------|
+| **v6.6.1** | 2026-03-02 | Excelシート複数選択対応（selectbox→multiselect）、load_multiple()メソッド追加 |
 | **v6.6** | 2026-03-02 | 複数シート対応（Excel selectbox）、DEFAULT_MODEL=gemini-2.5-pro一元化、店舗調査モード簡略化、UI改善 |
 | **v6.5.1** | 2026-03-02 | コスト表示の日本円化（150円/USD固定）、正誤チェック解析失敗のデバッグログ追加 |
 | **v6.5** | 2026-02-27 | P2修正（industry型明確化、判定ロジック一元化、pydanticスキーマ）+ 新機能（コスト表示、API精度向上、0ベースリスト生成）、テスト405件 |

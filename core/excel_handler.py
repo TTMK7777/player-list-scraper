@@ -237,6 +237,27 @@ class ExcelHandler:
             extra_data=extra_data,
         )
 
+    def load_multiple(
+        self, file_path: str | Path, sheet_names: list[str] | None = None
+    ) -> list[PlayerData]:
+        """複数シートからプレイヤーデータを読み込み、結合して返す
+
+        Args:
+            file_path: Excelファイルパス
+            sheet_names: 読み込むシート名のリスト（未指定時は load() と同じ動作）
+
+        Returns:
+            list[PlayerData]: 全シート分の結合済みプレイヤーデータ
+        """
+        if not sheet_names:
+            return self.load(file_path)
+
+        all_players: list[PlayerData] = []
+        for name in sheet_names:
+            players = self.load(file_path, sheet_name=name)
+            all_players.extend(players)
+        return all_players
+
     def get_column_names(self) -> list[str]:
         """検出された列名のリストを返す"""
         return [k for k in self.column_map.keys() if not k.startswith("_")]

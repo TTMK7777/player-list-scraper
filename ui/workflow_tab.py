@@ -123,7 +123,7 @@ def render_workflow_tab(industry: str):
 
             selected_sheet = select_sheet_if_multiple(temp_path, "workflow")
             handler = ExcelHandler()
-            players = handler.load(temp_path, sheet_name=selected_sheet)
+            players = handler.load_multiple(temp_path, sheet_names=selected_sheet)
             st.session_state.workflow_players = players
             st.success(f"{len(players)}件のプレイヤーを読み込みました")
 

@@ -2,7 +2,44 @@
 
 > **最終更新**: 2026-03-02
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v6.6
+> **バージョン**: v6.6.1
+
+## セッション: 2026-03-02 (3)
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v6.6.1: Excelシート複数選択対応（selectbox → multiselect） |
+| **変更ファイル** | 7ファイル（+33行 -10行） |
+| **テスト** | 405件全パス（回帰なし） |
+| **品質ゲート** | simple — 直接実装 |
+| **ステータス** | 完了 |
+
+### 変更詳細
+
+#### 1. シート選択をマルチセレクトに変更 (`ui/common.py`)
+- `st.selectbox` → `st.multiselect` に変更（複数シート同時選択可能に）
+- 戻り値: `Optional[str]` → `Optional[list[str]]`
+- デフォルト: 最初のシートが選択済み
+- 何も選択しなければ None → 従来の `load()` にフォールバック
+
+#### 2. 複数シート読み込みメソッド追加 (`core/excel_handler.py`)
+- `load_multiple(file_path, sheet_names)` メソッド新設
+- 複数シートを順次 `load()` して `extend()` で結合
+- `sheet_names` が None/空の場合は従来の `load()` にフォールバック
+
+#### 3. 全5タブの呼び出し変更
+- `handler.load(temp_path, sheet_name=selected_sheet)` → `handler.load_multiple(temp_path, sheet_names=selected_sheet)`
+- 対象: validation_tab, newcomer_tab, store_tab, workflow_tab, attribute_tab
+
+### 未完了・継続課題
+- [ ] 正誤チェック解析失敗の対策実装（ログ確認後）
+- [R] `excel_handler.py` SRP違反解消
+- [E] テンプレートIDのASCIIスラッグ化
+- [E] カテゴリ値対応（boolean以外の多値分類）
+- [E] LLMClient の AsyncContextManager 化
+
+---
 
 ## セッション: 2026-03-02 (2)
 

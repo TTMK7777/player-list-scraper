@@ -51,7 +51,7 @@ def render_newcomer_tab():
 
                 selected_sheet = select_sheet_if_multiple(temp_path, "newcomer")
                 handler = ExcelHandler()
-                players_data = handler.load(temp_path, sheet_name=selected_sheet)
+                players_data = handler.load_multiple(temp_path, sheet_names=selected_sheet)
 
                 existing_names = [p.player_name for p in players_data]
                 st.session_state.existing_players = existing_names
