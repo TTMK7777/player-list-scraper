@@ -2,30 +2,30 @@
 # インストール: pip install -r requirements.txt
 
 # Playwright（CLI版用・ブラウザ自動化）
-playwright>=1.40.0
+playwright==1.58.0
 
 # requests + BeautifulSoup（GUI版用）
-requests>=2.31.0
-beautifulsoup4>=4.12.0
+requests==2.32.5
+beautifulsoup4==4.14.3
 
 # Gemini API（メインSDK）
-google-genai>=1.0.0
+google-genai==1.66.0
 
 # Gemini API（フォールバック用旧SDK）
-google-generativeai>=0.8.0
+google-generativeai==0.8.6
 
 # 環境変数読み込み
-python-dotenv>=1.0.0
+python-dotenv==1.2.2
 
 # リッチな出力表示
-rich>=13.0.0
+rich==14.3.3
 
 # GUI
-streamlit>=1.30.0
-pandas>=2.0.0
+streamlit==1.55.0
+pandas==3.0.1
 
 # Excel出力（オプション）
-openpyxl>=3.1.0
+openpyxl==3.1.5
 
 # LLMレスポンスバリデーション
-pydantic>=2.0.0,<3.0.0
+pydantic==2.12.5
