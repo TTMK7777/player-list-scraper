@@ -83,3 +83,7 @@ archive/
 
 # ユーザー作成テンプレート
 templates/user/
+
+# Security - credentials & keys
+*.p12
+.credentials.json
