@@ -123,6 +123,7 @@ class AttributeItemLLMResponse(BaseModel):
     attributes: dict = Field(default_factory=dict)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     sources: list[str] = Field(default_factory=list)
+    reasoning: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("confidence", mode="before")
     @classmethod
@@ -135,6 +136,14 @@ class AttributeItemLLMResponse(BaseModel):
         if isinstance(v, str):
             return [v] if v else []
         return v or []
+
+    @field_validator("reasoning", mode="before")
+    @classmethod
+    def coerce_reasoning(cls, v):
+        """reasoning を dict に強制変換。非dict(NoneやList) → 空dict"""
+        if not isinstance(v, dict):
+            return {}
+        return v
 
 
 class AttributeBatchLLMResponse(BaseModel):

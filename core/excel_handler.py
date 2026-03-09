@@ -48,6 +48,7 @@ class ExcelHandler:
     # 列名の候補パターン（優先度順）
     PLAYER_NAME_PATTERNS = [
         r"^サービス名$", r"^プレイヤー名$", r"^ブランド名$", r"^企業名$", r"^会社名$",
+        r"^名称$", r"^サービス$", r"^プレイヤー$", r"^調査対象$", r"^name$",
         r"サービス名", r"プレイヤー名", r"ブランド名",
         r"player.*name", r"service.*name", r"brand",
     ]
@@ -73,6 +74,7 @@ class ExcelHandler:
         self.sheet = None
         self.header_row = 1
         self.column_map: dict[str, int] = {}  # 列名 -> 列インデックス
+        self.warnings: list[str] = []  # 読み込み時の警告メッセージ
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
@@ -127,6 +129,12 @@ class ExcelHandler:
                 player = self._read_row(row_idx)
                 if player and player.player_name.strip():
                     players.append(player)
+
+            self.logger.info(
+                "Excel読み込み完了: %d件のプレイヤーを読み込みました（ヘッダー行: %d）",
+                len(players),
+                self.header_row,
+            )
 
             return players
         finally:
@@ -186,25 +194,65 @@ class ExcelHandler:
                     self.column_map["_company"] = col_idx
                     break
 
+        # プレイヤー名列がパターンマッチで見つからない場合、インテリジェントフォールバック
+        if "_player_name" not in self.column_map:
+            fallback_col = self._find_fallback_player_column()
+            if fallback_col is not None:
+                self.column_map["_player_name"] = fallback_col
+                col_name = str(
+                    self.sheet.cell(self.header_row, fallback_col).value or ""
+                ).strip()
+                msg = (
+                    f"プレイヤー名列が自動検出されませんでした。"
+                    f"列{fallback_col}（{col_name}）をフォールバックとして使用します。"
+                )
+                self.warnings.append(msg)
+                self.logger.warning(msg)
+
+    def _find_fallback_player_column(self) -> Optional[int]:
+        """フォールバック用のプレイヤー名列を推定する
+
+        列1〜3のデータ行をサンプリングし、全サンプルが数字のみの列はNo.列と
+        判断してスキップする。最初の非数字列をフォールバックとして返す。
+
+        Returns:
+            フォールバック列のインデックス（1-based）、または全列数字の場合は1
+        """
+        max_col = min(3, self.sheet.max_column)
+        sample_rows = range(
+            self.header_row + 1,
+            min(self.header_row + 4, self.sheet.max_row + 1),
+        )
+
+        for col_idx in range(1, max_col + 1):
+            samples = []
+            for row_idx in sample_rows:
+                value = str(self.sheet.cell(row_idx, col_idx).value or "").strip()
+                if value:
+                    samples.append(value)
+
+            # サンプルが空の場合はスキップ
+            if not samples:
+                continue
+
+            # 全サンプルが数字のみ → No.列と判断してスキップ
+            if all(s.isdigit() for s in samples):
+                continue
+
+            # 非数字データを含む列を発見 → フォールバックとして使用
+            return col_idx
+
+        # 全列が数字のみの場合は列1を最終フォールバック
+        return 1
+
     def _read_row(self, row_idx: int) -> Optional[PlayerData]:
         """1行をPlayerDataに変換"""
-        # プレイヤー名を取得
-        player_name_col = self.column_map.get("_player_name")
-        if player_name_col is None:
-            # フォールバック: 列1を使用するが警告を出す
-            player_name_col = 1
-            if row_idx == self.header_row + 1:  # 最初の行でのみ警告
-                self.logger.warning(
-                    "プレイヤー名列が自動検出されませんでした。列1をフォールバックとして使用します。"
-                )
+        # プレイヤー名を取得（_create_column_map()で必ず設定済み）
+        player_name_col = self.column_map.get("_player_name", 1)
 
         player_name = str(self.sheet.cell(row_idx, player_name_col).value or "").strip()
 
         if not player_name:
-            return None
-
-        # フォールバック列を使用している場合、数字のみの行はスキップ
-        if "_player_name" not in self.column_map and player_name.isdigit():
             return None
 
         # URLを取得
@@ -607,6 +655,8 @@ class AttributeInvestigationExporter:
     # 後続ヘッダー列
     SUFFIX_COLUMNS = [
         "要確認フラグ",
+        "信頼度",
+        "判定理由",
         "ソースURL",
         "調査日時",
     ]
@@ -713,6 +763,23 @@ class AttributeInvestigationExporter:
         )
         col_idx += 1
 
+        # 信頼度
+        confidence = getattr(result, "confidence", 0.0)
+        self.sheet.cell(row=row_idx, column=col_idx, value=confidence)
+        col_idx += 1
+
+        # 判定理由
+        reasoning_map = getattr(result, "reasoning_map", {})
+        if reasoning_map:
+            reasoning_text = "\n".join(
+                f"{k}: {v}" for k, v in reasoning_map.items()
+            )
+        else:
+            reasoning_text = ""
+        cell = self.sheet.cell(row=row_idx, column=col_idx, value=reasoning_text)
+        cell.alignment = Alignment(vertical="top", wrap_text=True)
+        col_idx += 1
+
         # ソースURL
         source_urls = "\n".join(result.source_urls) if result.source_urls else ""
         cell = self.sheet.cell(row=row_idx, column=col_idx, value=source_urls)
@@ -737,6 +804,10 @@ class AttributeInvestigationExporter:
                 width = 25
             elif col_name == "要確認フラグ":
                 width = 12
+            elif col_name == "信頼度":
+                width = 10
+            elif col_name == "判定理由":
+                width = 40
             elif col_name == "ソースURL":
                 width = 50
             elif col_name == "調査日時":

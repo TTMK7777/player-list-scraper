@@ -311,6 +311,51 @@ class TestBatchResponseParsing:
 # ====================================
 # 属性マトリクス正規化テスト
 # ====================================
+class TestConfidenceAndReasoningInResults:
+    """confidence と reasoning_map が結果に格納されることのテスト"""
+
+    def test_confidence_stored_in_result(self, sample_attributes):
+        """confidence が結果に格納されること"""
+        mock = MagicMock()
+        mock.extract_json.return_value = {
+            "results": [{
+                "player_name": "TestService",
+                "attributes": {attr: True for attr in sample_attributes},
+                "confidence": 0.92,
+                "sources": ["https://example.com"],
+                "reasoning": {},
+            }]
+        }
+        investigator = AttributeInvestigator(llm_client=mock)
+        results = investigator._parse_batch_response(
+            "...",
+            [{"player_name": "TestService"}],
+            sample_attributes,
+        )
+        assert results[0].confidence == pytest.approx(0.92)
+
+    def test_reasoning_map_stored_in_result(self, sample_attributes):
+        """reasoning_map が結果に格納されること"""
+        reasoning = {"邦画": "公式サイトに掲載あり", "洋画": "公式サイトに記載なし"}
+        mock = MagicMock()
+        mock.extract_json.return_value = {
+            "results": [{
+                "player_name": "TestService",
+                "attributes": {attr: True for attr in sample_attributes},
+                "confidence": 0.85,
+                "sources": [],
+                "reasoning": reasoning,
+            }]
+        }
+        investigator = AttributeInvestigator(llm_client=mock)
+        results = investigator._parse_batch_response(
+            "...",
+            [{"player_name": "TestService"}],
+            sample_attributes,
+        )
+        assert results[0].reasoning_map == reasoning
+
+
 class TestAttributeMatrixNormalization:
     """属性マトリクス正規化のテスト"""
 

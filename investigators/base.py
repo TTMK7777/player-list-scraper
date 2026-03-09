@@ -349,6 +349,8 @@ class AttributeInvestigationResult:
     investigation_date: datetime = field(default_factory=datetime.now)
     needs_verification: bool = False
     raw_response: str = ""
+    confidence: float = 0.0
+    reasoning_map: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def create_success(
@@ -356,6 +358,8 @@ class AttributeInvestigationResult:
         player_name: str,
         attribute_matrix: dict[str, Optional[bool]],
         source_urls: Optional[list[str]] = None,
+        confidence: float = 0.0,
+        reasoning_map: dict[str, str] | None = None,
     ) -> "AttributeInvestigationResult":
         """成功した調査結果を作成"""
         return cls(
@@ -364,6 +368,8 @@ class AttributeInvestigationResult:
             source_urls=source_urls or [],
             investigation_date=datetime.now(),
             needs_verification=False,
+            confidence=confidence,
+            reasoning_map=reasoning_map if reasoning_map is not None else {},
         )
 
     @classmethod
@@ -408,6 +414,8 @@ class AttributeInvestigationResult:
             "source_urls": self.source_urls,
             "investigation_date": self.investigation_date.isoformat() if self.investigation_date else "",
             "needs_verification": self.needs_verification,
+            "confidence": self.confidence,
+            "reasoning_map": self.reasoning_map,
         }
 
 

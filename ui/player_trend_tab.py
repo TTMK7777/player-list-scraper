@@ -88,6 +88,11 @@ def _render_shared_upload() -> None:
 
             st.success(f"✅ {len(players)}件のプレイヤーを読み込みました")
 
+            # フォールバック警告の表示
+            if handler.warnings:
+                for warn_msg in handler.warnings:
+                    st.warning(f"⚠️ {warn_msg}")
+
             with st.expander("📋 検出された列"):
                 cols = handler.get_column_names()
                 st.write(cols)

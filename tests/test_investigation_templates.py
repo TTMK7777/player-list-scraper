@@ -541,6 +541,297 @@ class TestTemplateManager:
 
 
 # ====================================
+# update_template テスト
+# ====================================
+class TestUpdateTemplate:
+    """update_template メソッドのテスト"""
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path):
+        """テスト用の一時ディレクトリ"""
+        builtin_dir = tmp_path / "templates" / "builtin"
+        user_dir = tmp_path / "templates" / "user"
+        builtin_dir.mkdir(parents=True, exist_ok=True)
+        user_dir.mkdir(parents=True, exist_ok=True)
+
+        # テスト用組み込みテンプレート
+        builtin_template = {
+            "id": "builtin_test",
+            "label": "組み込みテスト",
+            "description": "テスト用組み込みテンプレート",
+            "category": "属性系",
+            "attributes": ["属性1", "属性2"],
+            "context": "組み込みコンテキスト",
+            "batch_size": 5,
+            "is_builtin": True,
+            "created_at": "2026-02-17T00:00:00",
+            "updated_at": "2026-02-17T00:00:00",
+        }
+        with open(builtin_dir / "builtin_test.json", "w", encoding="utf-8") as f:
+            json.dump(builtin_template, f, ensure_ascii=False)
+
+        return tmp_path
+
+    def test_update_user_template(self, temp_dir):
+        """userテンプレートの更新"""
+        manager = TemplateManager(project_root=temp_dir)
+
+        # ユーザーテンプレート作成
+        user_template = InvestigationTemplate(
+            id="user_update_test",
+            label="更新前ラベル",
+            category="カスタム",
+            attributes=["属性A"],
+            context="更新前コンテキスト",
+        )
+        manager.save_template(user_template)
+
+        # 部分更新
+        updated = manager.update_template(
+            "user_update_test",
+            label="更新後ラベル",
+            context="更新後コンテキスト",
+        )
+        assert updated.label == "更新後ラベル"
+        assert updated.context == "更新後コンテキスト"
+        assert updated.attributes == ["属性A"]  # 変更していないフィールド
+
+    def test_update_builtin_creates_copy(self, temp_dir):
+        """builtinテンプレートの更新でコピーが作成される"""
+        manager = TemplateManager(project_root=temp_dir)
+
+        updated = manager.update_template(
+            "builtin_test",
+            label="カスタムラベル",
+            attributes=["属性1", "属性2", "属性3"],
+        )
+        assert updated.id == "builtin_test_custom"
+        assert updated.label == "カスタムラベル"
+        assert updated.is_builtin is False
+        assert len(updated.attributes) == 3
+
+        # 元のbuiltinは変更されていないこと
+        original = manager.get_template("builtin_test")
+        assert original.is_builtin is True
+        assert len(original.attributes) == 2
+
+    def test_update_nonexistent_raises_key_error(self, temp_dir):
+        """存在しないIDでKeyError"""
+        manager = TemplateManager(project_root=temp_dir)
+
+        with pytest.raises(KeyError):
+            manager.update_template("nonexistent_template", label="新ラベル")
+
+
+# ====================================
+# export_to_json_bytes / import_from_json テスト
+# ====================================
+class TestExportImportJson:
+    """JSON エクスポート/インポートのテスト"""
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path):
+        """テスト用の一時ディレクトリ"""
+        builtin_dir = tmp_path / "templates" / "builtin"
+        user_dir = tmp_path / "templates" / "user"
+        builtin_dir.mkdir(parents=True, exist_ok=True)
+        user_dir.mkdir(parents=True, exist_ok=True)
+
+        builtin_template = {
+            "id": "export_test",
+            "label": "エクスポートテスト",
+            "description": "テスト用",
+            "category": "属性系",
+            "attributes": ["属性X", "属性Y"],
+            "context": "テストコンテキスト",
+            "batch_size": 5,
+            "is_builtin": True,
+            "created_at": "2026-02-17T00:00:00",
+            "updated_at": "2026-02-17T00:00:00",
+        }
+        with open(builtin_dir / "export_test.json", "w", encoding="utf-8") as f:
+            json.dump(builtin_template, f, ensure_ascii=False)
+
+        return tmp_path
+
+    def test_export_to_json_bytes_valid(self, temp_dir):
+        """export_to_json_bytes: 有効なJSONバイト列が返ること"""
+        manager = TemplateManager(project_root=temp_dir)
+        result = manager.export_to_json_bytes("export_test")
+
+        assert isinstance(result, bytes)
+        data = json.loads(result.decode("utf-8"))
+        assert data["id"] == "export_test"
+        assert data["label"] == "エクスポートテスト"
+
+    def test_export_to_json_bytes_is_builtin_false(self, temp_dir):
+        """export_to_json_bytes: is_builtin=Falseであること"""
+        manager = TemplateManager(project_root=temp_dir)
+        result = manager.export_to_json_bytes("export_test")
+
+        data = json.loads(result.decode("utf-8"))
+        assert data["is_builtin"] is False
+
+    def test_import_from_json_normal(self, temp_dir):
+        """import_from_json: 正常インポート"""
+        manager = TemplateManager(project_root=temp_dir)
+        json_data = json.dumps({
+            "id": "imported_test",
+            "label": "インポートテスト",
+            "category": "カスタム",
+            "attributes": ["属性1", "属性2"],
+            "context": "インポートコンテキスト",
+        }, ensure_ascii=False)
+
+        result = manager.import_from_json(json_data)
+        assert result.id == "imported_test"
+        assert result.label == "インポートテスト"
+        assert result.is_builtin is False
+
+        # 保存されていることを確認
+        loaded = manager.get_template("imported_test")
+        assert loaded.label == "インポートテスト"
+
+    def test_import_from_json_invalid_json(self, temp_dir):
+        """import_from_json: 不正JSONでValueError"""
+        manager = TemplateManager(project_root=temp_dir)
+
+        with pytest.raises(ValueError, match="不正なJSON"):
+            manager.import_from_json("これはJSONではない{{{")
+
+    def test_import_from_json_missing_required(self, temp_dir):
+        """import_from_json: 必須フィールド不足でValueError"""
+        manager = TemplateManager(project_root=temp_dir)
+        json_data = json.dumps({
+            "id": "missing_test",
+            # label がない
+            "attributes": ["A"],
+        })
+
+        with pytest.raises(ValueError, match="必須フィールドが不足"):
+            manager.import_from_json(json_data)
+
+    def test_import_from_json_disallowed_fields_excluded(self, temp_dir):
+        """import_from_json: 不許可フィールドが除外されること"""
+        manager = TemplateManager(project_root=temp_dir)
+        json_data = json.dumps({
+            "id": "sanitize_test",
+            "label": "サニタイズテスト",
+            "category": "カスタム",
+            "attributes": ["属性1"],
+            "malicious_field": "攻撃データ",
+            "created_at": "2020-01-01T00:00:00",  # ホワイトリスト外
+            "updated_at": "2020-01-01T00:00:00",  # ホワイトリスト外
+        }, ensure_ascii=False)
+
+        result = manager.import_from_json(json_data)
+        assert result.id == "sanitize_test"
+        # malicious_field は InvestigationTemplate に存在しない
+        assert not hasattr(result, "malicious_field")
+
+    def test_import_from_json_is_builtin_forced_false(self, temp_dir):
+        """import_from_json: is_builtinが強制Falseであること"""
+        manager = TemplateManager(project_root=temp_dir)
+        json_data = json.dumps({
+            "id": "force_false_test",
+            "label": "強制Falseテスト",
+            "category": "カスタム",
+            "attributes": ["属性1"],
+            "is_builtin": True,  # True を指定しても
+        }, ensure_ascii=False)
+
+        result = manager.import_from_json(json_data)
+        assert result.is_builtin is False  # 強制的に False
+
+    def test_roundtrip_export_import(self, temp_dir):
+        """ラウンドトリップ: export_to_json_bytes → import_from_json"""
+        manager = TemplateManager(project_root=temp_dir)
+
+        # まずユーザーテンプレートを作成
+        original = InvestigationTemplate(
+            id="roundtrip_test",
+            label="ラウンドトリップテスト",
+            description="往復確認用",
+            category="分類系",
+            attributes=["属性A", "属性B", "属性C"],
+            context="テストコンテキスト",
+            batch_size=7,
+            is_builtin=False,
+        )
+        manager.save_template(original)
+
+        # エクスポート
+        exported_bytes = manager.export_to_json_bytes("roundtrip_test")
+
+        # 別IDで再インポート（同一IDだと上書きになるのでIDを変更）
+        data = json.loads(exported_bytes.decode("utf-8"))
+        data["id"] = "roundtrip_imported"
+        json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        imported = manager.import_from_json(json_bytes)
+
+        assert imported.id == "roundtrip_imported"
+        assert imported.label == original.label
+        assert imported.description == original.description
+        assert imported.category == original.category
+        assert imported.attributes == original.attributes
+        assert imported.context == original.context
+        assert imported.is_builtin is False
+
+
+# ====================================
+# export_all_to_excel_bytes テスト
+# ====================================
+class TestExportAllToExcelBytes:
+    """export_all_to_excel_bytes のテスト"""
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path):
+        """テスト用の一時ディレクトリ"""
+        builtin_dir = tmp_path / "templates" / "builtin"
+        user_dir = tmp_path / "templates" / "user"
+        builtin_dir.mkdir(parents=True, exist_ok=True)
+        user_dir.mkdir(parents=True, exist_ok=True)
+
+        builtin_template = {
+            "id": "excel_test",
+            "label": "Excelテスト",
+            "description": "テスト用",
+            "category": "属性系",
+            "attributes": ["属性X", "属性Y"],
+            "context": "",
+            "batch_size": 5,
+            "is_builtin": True,
+            "created_at": "2026-02-17T00:00:00",
+            "updated_at": "2026-02-17T00:00:00",
+        }
+        with open(builtin_dir / "excel_test.json", "w", encoding="utf-8") as f:
+            json.dump(builtin_template, f, ensure_ascii=False)
+
+        return tmp_path
+
+    def test_export_all_to_excel_bytes_valid(self, temp_dir):
+        """export_all_to_excel_bytes: 有効なバイト列が返ること"""
+        pytest.importorskip("openpyxl")
+        manager = TemplateManager(project_root=temp_dir)
+        result = manager.export_all_to_excel_bytes()
+
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+        # openpyxl で開けることを確認
+        import io
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(result))
+        ws = wb.active
+        # ヘッダー行を確認
+        assert ws.cell(row=1, column=1).value == "ID"
+        assert ws.cell(row=1, column=2).value == "名前"
+        # データ行が存在すること
+        assert ws.cell(row=2, column=1).value == "excel_test"
+        wb.close()
+
+
+# ====================================
 # 実際の組み込みテンプレートとの整合性テスト
 # ====================================
 class TestBuiltinTemplates:

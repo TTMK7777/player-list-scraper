@@ -74,32 +74,251 @@ class TestExcelHandler:
 class TestExcelHandlerFallback:
     """Excel列検出フォールバックのテスト"""
 
-    def test_numeric_only_rows_skipped_on_fallback(self, tmp_path):
-        """フォールバック列使用時、数字のみの行はスキップされる"""
+    def test_no_column_skips_numeric_first_column(self, tmp_path):
+        """No.列(列1)+プレイヤー名列(列2)のExcelで列2が自動選択される"""
         import openpyxl
 
         wb = openpyxl.Workbook()
         ws = wb.active
 
         # ヘッダー行（プレイヤー名パターンにマッチしない列名）
-        ws.cell(row=1, column=1, value="列A")
-        ws.cell(row=1, column=2, value="列B")
+        ws.cell(row=1, column=1, value="No.")
+        ws.cell(row=1, column=2, value="対象")
 
         # データ行
-        ws.cell(row=2, column=1, value="12345")  # 数字のみ → スキップされるべき
-        ws.cell(row=2, column=2, value="データ1")
-        ws.cell(row=3, column=1, value="サービスX")  # これは通る
-        ws.cell(row=3, column=2, value="データ2")
+        ws.cell(row=2, column=1, value="1")
+        ws.cell(row=2, column=2, value="Netflix")
+        ws.cell(row=3, column=1, value="2")
+        ws.cell(row=3, column=2, value="Hulu")
+        ws.cell(row=4, column=1, value="3")
+        ws.cell(row=4, column=2, value="SAMANSA")
 
-        file_path = tmp_path / "fallback_test.xlsx"
+        file_path = tmp_path / "no_col_test.xlsx"
         wb.save(file_path)
 
         handler = ExcelHandler()
         players = handler.load(file_path)
 
-        # 数字のみの行はスキップ、サービスXは残る
+        # 列2がフォールバックとして選択され、全プレイヤーが読み込まれる
+        assert len(players) == 3
+        names = [p.player_name for p in players]
+        assert "Netflix" in names
+        assert "Hulu" in names
+        assert "SAMANSA" in names
+        # 列1（No.列）ではなく列2が_player_nameに設定されていること
+        assert handler.column_map.get("_player_name") == 2
+
+    def test_double_numeric_columns_skipped(self, tmp_path):
+        """No.列(列1)+No.列(列2)+プレイヤー名列(列3)のExcelで列3が選択される"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="No.")
+        ws.cell(row=1, column=2, value="管理番号")
+        ws.cell(row=1, column=3, value="対象")
+
+        ws.cell(row=2, column=1, value="1")
+        ws.cell(row=2, column=2, value="100")
+        ws.cell(row=2, column=3, value="Netflix")
+        ws.cell(row=3, column=1, value="2")
+        ws.cell(row=3, column=2, value="200")
+        ws.cell(row=3, column=3, value="Hulu")
+
+        file_path = tmp_path / "double_no_col_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        assert len(players) == 2
+        assert handler.column_map.get("_player_name") == 3
+        assert players[0].player_name == "Netflix"
+        assert players[1].player_name == "Hulu"
+
+    def test_all_numeric_columns_fallback_to_col1(self, tmp_path):
+        """全列が数字のみの場合、列1を最終フォールバックとして使用"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="コードA")
+        ws.cell(row=1, column=2, value="コードB")
+
+        ws.cell(row=2, column=1, value="100")
+        ws.cell(row=2, column=2, value="200")
+        ws.cell(row=3, column=1, value="300")
+        ws.cell(row=3, column=2, value="400")
+
+        file_path = tmp_path / "all_numeric_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        # 全列数字のため列1にフォールバック、数字のプレイヤー名もスキップされない
+        assert handler.column_map.get("_player_name") == 1
+        assert len(players) == 2
+        assert players[0].player_name == "100"
+        assert players[1].player_name == "300"
+
+    def test_samansa_bug_scenario(self, tmp_path):
+        """SAMANSAバグ再現: 定額制動画配信でNo.7 SAMANSAが反映される"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        # 実際のプレイヤーリスト構造を模擬
+        ws.cell(row=1, column=1, value="No.")
+        ws.cell(row=1, column=2, value="対象サービス")
+
+        services = [
+            "Netflix", "Amazonプライム・ビデオ", "U-NEXT", "Hulu",
+            "Disney+", "dアニメストア", "SAMANSA", "ABEMA",
+        ]
+        for i, name in enumerate(services, 1):
+            ws.cell(row=i + 1, column=1, value=str(i))
+            ws.cell(row=i + 1, column=2, value=name)
+
+        file_path = tmp_path / "samansa_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        names = [p.player_name for p in players]
+        assert "SAMANSA" in names, "SAMANSAが読み込まれていない"
+        assert len(players) == 8
+
+    def test_header_detection_meishou(self, tmp_path):
+        """新パターン「名称」でのヘッダー検出テスト"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="名称")
+        ws.cell(row=1, column=2, value="備考")
+        ws.cell(row=2, column=1, value="テストサービス")
+        ws.cell(row=2, column=2, value="メモ")
+
+        file_path = tmp_path / "meishou_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        assert handler.column_map.get("_player_name") == 1
         assert len(players) == 1
-        assert players[0].player_name == "サービスX"
+        assert players[0].player_name == "テストサービス"
+
+    def test_header_detection_service(self, tmp_path):
+        """新パターン「サービス」でのヘッダー検出テスト"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="サービス")
+        ws.cell(row=2, column=1, value="Hulu")
+
+        file_path = tmp_path / "service_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        assert handler.column_map.get("_player_name") == 1
+        assert players[0].player_name == "Hulu"
+
+    def test_header_detection_chousataishou(self, tmp_path):
+        """新パターン「調査対象」でのヘッダー検出テスト"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="調査対象")
+        ws.cell(row=2, column=1, value="楽天モバイル")
+
+        file_path = tmp_path / "chousataishou_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        assert handler.column_map.get("_player_name") == 1
+        assert players[0].player_name == "楽天モバイル"
+
+    def test_header_detection_name_english(self, tmp_path):
+        """新パターン「name」でのヘッダー検出テスト"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="name")
+        ws.cell(row=2, column=1, value="TestPlayer")
+
+        file_path = tmp_path / "name_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        players = handler.load(file_path)
+
+        assert handler.column_map.get("_player_name") == 1
+        assert players[0].player_name == "TestPlayer"
+
+    def test_warnings_attribute_accumulation(self, tmp_path):
+        """warnings属性にフォールバック警告が蓄積される"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="No.")
+        ws.cell(row=1, column=2, value="対象")
+        ws.cell(row=2, column=1, value="1")
+        ws.cell(row=2, column=2, value="テストA")
+
+        file_path = tmp_path / "warnings_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        assert handler.warnings == []  # 初期状態は空
+
+        handler.load(file_path)
+
+        # フォールバック使用時に警告が蓄積される
+        assert len(handler.warnings) == 1
+        assert "フォールバック" in handler.warnings[0]
+
+    def test_fallback_warning_message_content(self, tmp_path):
+        """フォールバック警告メッセージに列番号と列名が含まれる"""
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+
+        ws.cell(row=1, column=1, value="No.")
+        ws.cell(row=1, column=2, value="対象名")
+        ws.cell(row=2, column=1, value="1")
+        ws.cell(row=2, column=2, value="テストサービス")
+
+        file_path = tmp_path / "warning_content_test.xlsx"
+        wb.save(file_path)
+
+        handler = ExcelHandler()
+        handler.load(file_path)
+
+        assert len(handler.warnings) == 1
+        warning_msg = handler.warnings[0]
+        assert "列2" in warning_msg
+        assert "対象名" in warning_msg
+        assert "自動検出されませんでした" in warning_msg
 
     def test_fallback_warning_logged(self, tmp_path, caplog):
         """フォールバック列使用時にwarningがログ出力される"""

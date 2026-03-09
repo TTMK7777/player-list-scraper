@@ -16,6 +16,8 @@ template = manager.get_template("動画配信_ジャンル")
 ```
 """
 
+import html
+import io
 import json
 import logging
 import os
@@ -356,3 +358,184 @@ class TemplateManager:
         """
         template = self.get_template(template_id)
         return template.to_dict()
+
+    def update_template(
+        self,
+        template_id: str,
+        label: str | None = None,
+        description: str | None = None,
+        attributes: list[str] | None = None,
+        context: str | None = None,
+        batch_size: int | None = None,
+    ) -> InvestigationTemplate:
+        """既存テンプレートを部分更新する。
+
+        Noneのフィールドは変更しない。builtin テンプレートの場合は
+        コピーとしてuser保存する（IDに ``_custom`` 付与、ラベルに
+        「（カスタム）」付与）。
+
+        Args:
+            template_id: 更新対象のテンプレートID。
+            label: 新しいラベル（Noneなら変更なし）。
+            description: 新しい説明（Noneなら変更なし）。
+            attributes: 新しい属性リスト（Noneなら変更なし）。
+            context: 新しいコンテキスト（Noneなら変更なし）。
+            batch_size: 新しいバッチサイズ（Noneなら変更なし）。
+
+        Returns:
+            更新（または新規作成）された InvestigationTemplate。
+
+        Raises:
+            KeyError: テンプレートが見つからない場合。
+        """
+        template = self.get_template(template_id)
+
+        if template.is_builtin:
+            # builtin の場合はコピーとして保存
+            new_id = f"{template_id}_custom"
+            new_label = label if label is not None else f"{template.label}（カスタム）"
+            template = InvestigationTemplate(
+                id=new_id,
+                label=new_label,
+                description=description if description is not None else template.description,
+                category=template.category,
+                attributes=attributes if attributes is not None else list(template.attributes),
+                context=context if context is not None else template.context,
+                batch_size=batch_size if batch_size is not None else template.batch_size,
+                is_builtin=False,
+            )
+        else:
+            # user テンプレートは直接更新
+            if label is not None:
+                template.label = label
+            if description is not None:
+                template.description = description
+            if attributes is not None:
+                template.attributes = attributes
+            if context is not None:
+                template.context = context
+            if batch_size is not None:
+                template.batch_size = batch_size
+            template.is_builtin = False
+
+        self.save_template(template)
+        return template
+
+    def export_to_json_bytes(self, template_id: str) -> bytes:
+        """テンプレートをJSON bytes として返す。
+
+        ``export_template()`` の結果を JSON bytes 化する。
+        ``is_builtin`` は False にリセットされる。
+
+        Args:
+            template_id: エクスポートするテンプレートのID。
+
+        Returns:
+            JSON エンコードされた bytes。
+
+        Raises:
+            KeyError: テンプレートが見つからない場合。
+        """
+        data = self.export_template(template_id)
+        data["is_builtin"] = False
+        return json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+
+    def import_from_json(self, json_data: bytes | str) -> InvestigationTemplate:
+        """JSON データからテンプレートをインポートする。
+
+        許可フィールドのホワイトリストで sanitize し、
+        ``is_builtin`` は強制的に False にする。
+        各属性に ``html.escape()`` を適用して XSS ペイロードを防止する。
+
+        Args:
+            json_data: JSON バイト列または文字列。
+
+        Returns:
+            インポートされた InvestigationTemplate。
+
+        Raises:
+            ValueError: 不正な JSON または必須フィールド不足の場合。
+        """
+        if isinstance(json_data, bytes):
+            json_data = json_data.decode("utf-8")
+
+        try:
+            raw = json.loads(json_data)
+        except (json.JSONDecodeError, TypeError) as e:
+            raise ValueError(f"不正なJSON: {e}")
+
+        if not isinstance(raw, dict):
+            raise ValueError("JSONはオブジェクト形式でなければなりません")
+
+        # 必須フィールドチェック
+        required = ("id", "label", "attributes")
+        missing = [f for f in required if f not in raw]
+        if missing:
+            raise ValueError(f"必須フィールドが不足しています: {', '.join(missing)}")
+
+        # ホワイトリストで sanitize
+        allowed_fields = {"id", "label", "description", "category", "attributes", "context", "batch_size"}
+        sanitized = {k: v for k, v in raw.items() if k in allowed_fields}
+
+        # IDのパストラバーサル防止（ファイル名に使用されるため）
+        if "id" in sanitized:
+            import re
+            safe_id = re.sub(r"[^\w\u3000-\u9FFF\uF900-\uFAFF]", "_", str(sanitized["id"]))
+            safe_id = re.sub(r"_+", "_", safe_id).strip("_")
+            sanitized["id"] = safe_id or "imported_template"
+
+        # category が未指定の場合はデフォルト値を設定
+        if "category" not in sanitized:
+            sanitized["category"] = "カスタム"
+
+        # is_builtin は強制 False
+        sanitized["is_builtin"] = False
+
+        # attributes の各要素に html.escape 適用
+        if "attributes" in sanitized and isinstance(sanitized["attributes"], list):
+            sanitized["attributes"] = [html.escape(str(a)) for a in sanitized["attributes"]]
+
+        template = InvestigationTemplate.from_dict(sanitized)
+        self.save_template(template)
+        return template
+
+    def export_all_to_excel_bytes(self, category: str | None = None) -> bytes:
+        """テンプレート一覧を Excel bytes として返す。
+
+        列: ID / 名前 / カテゴリ / 属性数 / 属性リスト（カンマ区切り）/
+        判定基準 / タイプ(builtin/user) / 日時
+
+        Args:
+            category: フィルタするカテゴリ。None の場合は全件。
+
+        Returns:
+            Excel ファイルの bytes データ。
+        """
+        import openpyxl
+
+        templates = self.list_templates(category=category)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "テンプレート一覧"
+
+        # ヘッダー
+        headers = ["ID", "名前", "カテゴリ", "属性数", "属性リスト", "判定基準", "タイプ", "更新日時"]
+        for col, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col, value=header)
+
+        # データ行
+        for row_idx, tmpl in enumerate(templates, 2):
+            ws.cell(row=row_idx, column=1, value=tmpl.id)
+            ws.cell(row=row_idx, column=2, value=tmpl.label)
+            ws.cell(row=row_idx, column=3, value=tmpl.category)
+            ws.cell(row=row_idx, column=4, value=len(tmpl.attributes))
+            ws.cell(row=row_idx, column=5, value=", ".join(tmpl.attributes))
+            ws.cell(row=row_idx, column=6, value=tmpl.context)
+            ws.cell(row=row_idx, column=7, value="builtin" if tmpl.is_builtin else "user")
+            ws.cell(row=row_idx, column=8, value=tmpl.updated_at)
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        wb.close()
+        return buffer.getvalue()

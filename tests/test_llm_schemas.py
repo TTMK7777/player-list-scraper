@@ -204,6 +204,46 @@ class TestAttributeItemLLMResponse:
         result = AttributeItemLLMResponse.model_validate(data)
         assert result.sources == ["https://example.com"]
 
+    def test_reasoning_normal_dict(self):
+        """reasoning に正しいdictが返ること"""
+        data = {
+            "player_name": "Netflix",
+            "attributes": {"アクション": True},
+            "reasoning": {"アクション": "公式サイトのジャンル一覧に掲載あり"},
+        }
+        result = AttributeItemLLMResponse.model_validate(data)
+        assert result.reasoning == {"アクション": "公式サイトのジャンル一覧に掲載あり"}
+
+    def test_reasoning_empty_dict(self):
+        """reasoning が空dictの場合に空dictが返ること"""
+        data = {
+            "player_name": "Netflix",
+            "attributes": {},
+            "reasoning": {},
+        }
+        result = AttributeItemLLMResponse.model_validate(data)
+        assert result.reasoning == {}
+
+    def test_reasoning_invalid_types_coerced(self):
+        """reasoning が不正型(None, list)の場合に空dictに変換されること"""
+        # None の場合
+        data_none = {
+            "player_name": "Test",
+            "attributes": {},
+            "reasoning": None,
+        }
+        result_none = AttributeItemLLMResponse.model_validate(data_none)
+        assert result_none.reasoning == {}
+
+        # list の場合
+        data_list = {
+            "player_name": "Test",
+            "attributes": {},
+            "reasoning": ["理由1", "理由2"],
+        }
+        result_list = AttributeItemLLMResponse.model_validate(data_list)
+        assert result_list.reasoning == {}
+
 
 # ====================================
 # NewcomerCandidateLLMResponse

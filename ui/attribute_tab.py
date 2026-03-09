@@ -7,6 +7,7 @@
 TemplateManager によるテンプレート管理UIを提供。
 """
 
+import json
 import re
 import tempfile
 from datetime import datetime
@@ -133,6 +134,51 @@ def _render_template_section(
         if context:
             with st.expander("判定基準（context）"):
                 st.write(context)
+
+        # テンプレート編集 UI（機能3）
+        edit_label = "コピーして編集" if tpl.is_builtin else "テンプレートを編集"
+        with st.expander(edit_label):
+            edit_name = st.text_input(
+                "テンプレート名",
+                value=tpl.label,
+                key="inv_edit_label",
+            )
+            edit_desc = st.text_area(
+                "説明",
+                value=tpl.description or "",
+                height=60,
+                key="inv_edit_desc",
+            )
+            edit_attrs_text = st.text_area(
+                "属性（カンマまたは改行区切り）",
+                value=", ".join(tpl.attributes),
+                height=100,
+                key="inv_edit_attrs",
+            )
+            edit_context = st.text_area(
+                "判定基準",
+                value=tpl.context or "",
+                height=60,
+                key="inv_edit_context",
+            )
+
+            if st.button("保存", key="inv_edit_save"):
+                edited_attrs = tm.import_from_text(edit_attrs_text)
+                if not edited_attrs:
+                    st.error("属性を1つ以上入力してください。")
+                else:
+                    try:
+                        updated = tm.update_template(
+                            tpl.id,
+                            label=edit_name if edit_name != tpl.label else None,
+                            description=edit_desc if edit_desc != (tpl.description or "") else None,
+                            attributes=edited_attrs,
+                            context=edit_context if edit_context != (tpl.context or "") else None,
+                        )
+                        st.success(f"テンプレート「{updated.label}」を保存しました。")
+                        st.rerun()
+                    except (KeyError, ValueError, PermissionError) as e:
+                        st.error(f"保存エラー: {e}")
     else:
         # カスタム入力
         custom_input = st.text_area(
@@ -269,6 +315,62 @@ def _render_template_section(
                 except (PermissionError, KeyError) as e:
                     st.error(f"削除エラー: {e}")
 
+    # ------------------------------------------------------------------
+    # テンプレート共有（機能3: エクスポート/インポート）
+    # ------------------------------------------------------------------
+    with st.expander("テンプレートの共有"):
+        share_tab1, share_tab2, share_tab3 = st.tabs(
+            ["JSONエクスポート", "JSONインポート", "Excel一覧"]
+        )
+
+        with share_tab1:
+            if templates:
+                export_target = st.selectbox(
+                    "エクスポートするテンプレート",
+                    templates,
+                    format_func=lambda t: f"【{t.category}】{t.label}",
+                    key="inv_export_select",
+                )
+                if export_target:
+                    json_bytes = tm.export_to_json_bytes(export_target.id)
+                    st.download_button(
+                        "JSONダウンロード",
+                        json_bytes,
+                        f"{export_target.id}.json",
+                        "application/json",
+                        key="inv_json_download",
+                    )
+            else:
+                st.info("エクスポート可能なテンプレートがありません。")
+
+        with share_tab2:
+            uploaded_json = st.file_uploader(
+                "JSONファイルをアップロード",
+                type=["json"],
+                key="inv_json_upload",
+            )
+            if uploaded_json:
+                if st.button("インポート", key="inv_json_import"):
+                    try:
+                        imported = tm.import_from_json(uploaded_json.getvalue())
+                        st.success(
+                            f"テンプレート「{imported.label}」をインポートしました。"
+                        )
+                        st.rerun()
+                    except (ValueError, json.JSONDecodeError) as e:
+                        st.error(f"インポートエラー: {e}")
+
+        with share_tab3:
+            excel_bytes = tm.export_all_to_excel_bytes()
+            timestamp_tpl = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                "テンプレート一覧Excelダウンロード",
+                excel_bytes,
+                f"templates_{timestamp_tpl}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="inv_template_excel_download",
+            )
+
     st.divider()
 
     return attributes, batch_size, context
@@ -312,6 +414,11 @@ def _render_player_input_section() -> None:
 
                 st.session_state.attr_players = players
                 st.success(f"{len(players)}件のプレイヤーを読み込みました")
+
+                # フォールバック警告表示（機能1）
+                if handler.warnings:
+                    for warning_msg in handler.warnings:
+                        st.warning(warning_msg)
 
             except Exception as e:
                 st.error(f"Excelの読み込みに失敗: {e}")
@@ -481,6 +588,65 @@ def _render_results_section(attributes: list[str]) -> None:
 
     df = pd.DataFrame(matrix_data)
     st.dataframe(df, use_container_width=True, height=400)
+
+    # ------------------------------------------------------------------
+    # 判定根拠セクション（機能2）
+    # ------------------------------------------------------------------
+    st.subheader("判定根拠")
+
+    # R-2 対応: 上位10件 + すべて表示オプション
+    display_results = results[:10]
+    if len(results) > 10:
+        show_all = st.checkbox(
+            f"全{len(results)}件を表示",
+            key="inv_show_all_reasoning",
+        )
+        if show_all:
+            display_results = results
+
+    for r in display_results:
+        confidence = getattr(r, "confidence", 0.0)
+        reasoning_map = getattr(r, "reasoning_map", {})
+
+        # 信頼度バッジ
+        if confidence >= 0.8:
+            badge = f":green[信頼度: {confidence:.0%}]"
+        elif confidence >= 0.5:
+            badge = f":orange[信頼度: {confidence:.0%}]"
+        else:
+            badge = f":red[信頼度: {confidence:.0%}]"
+
+        with st.expander(f"{r.player_name} {badge}"):
+            # 属性×判定×理由テーブル
+            reasoning_data = []
+            for attr in attributes:
+                val = (r.attribute_matrix or {}).get(attr)
+                judgment = "○" if val is True else ("×" if val is False else "?")
+                reason = reasoning_map.get(attr, "")
+                if not reason:
+                    # R-1 対応: 部分一致フォールバック
+                    for key, val_reason in reasoning_map.items():
+                        if attr in key or key in attr:
+                            reason = val_reason
+                            break
+                reasoning_data.append({
+                    "属性": attr,
+                    "判定": judgment,
+                    "理由": reason or "-",
+                })
+
+            if reasoning_data:
+                st.dataframe(
+                    pd.DataFrame(reasoning_data),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            # ソースURL
+            if r.source_urls:
+                st.markdown("**情報源:**")
+                for url in r.source_urls:
+                    st.markdown(f"- {url}")
 
     st.divider()
 
