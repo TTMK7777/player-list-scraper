@@ -17,10 +17,15 @@ template = manager.get_template("動画配信_ジャンル")
 """
 
 import json
+import logging
+import os
+import tempfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # プロジェクトルートとテンプレートディレクトリの絶対パス解決
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -158,8 +163,9 @@ class TemplateManager:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 templates.append(InvestigationTemplate.from_dict(data))
-            except (json.JSONDecodeError, ValueError, KeyError):
+            except (json.JSONDecodeError, ValueError, KeyError) as e:
                 # 壊れたファイルはスキップ
+                logger.warning(f"テンプレート読み込みエラー: {json_file} - {e}")
                 continue
 
         return templates
@@ -233,8 +239,15 @@ class TemplateManager:
         template.updated_at = datetime.now().isoformat()
         save_path = self.user_dir / f"{template.id}.json"
 
-        with open(save_path, "w", encoding="utf-8") as f:
-            json.dump(template.to_dict(), f, ensure_ascii=False, indent=4)
+        fd, tmp_path = tempfile.mkstemp(dir=str(save_path.parent), suffix='.tmp')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(template.to_dict(), f, ensure_ascii=False, indent=4)
+            os.replace(tmp_path, str(save_path))
+        except BaseException:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
 
         return save_path
 

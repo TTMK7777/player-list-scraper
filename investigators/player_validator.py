@@ -70,7 +70,7 @@ class PlayerValidator:
     """
 
     # コスト概算用の単価（USD/API呼び出し）
-    COST_PER_CALL = 0.015
+    COST_PER_CALL = 0.015  # Gemini 2.5 Pro + 検索グラウンディング（1プレイヤーあたり概算）
 
     @staticmethod
     def estimate_cost(player_count: int) -> dict:
@@ -93,7 +93,7 @@ class PlayerValidator:
 
     def __init__(
         self,
-        llm_client: LLMClient = None,
+        llm_client: Optional[LLMClient] = None,
         model: str = DEFAULT_MODEL,
     ):
         """
@@ -155,7 +155,7 @@ class PlayerValidator:
         self,
         players: list[PlayerData],
         industry: Optional[str] = None,
-        on_progress: Callable[[int, int, str], None] = None,
+        on_progress: Optional[Callable[[int, int, str], None]] = None,
         concurrency: Optional[int] = None,
         delay_seconds: float = 1.0,
         definition: str = "",
@@ -196,9 +196,9 @@ class PlayerValidator:
                     definition=definition,
                 )
 
-                # API制限対策の遅延
-                await asyncio.sleep(delay_seconds)
-                return result
+            # API制限対策の遅延（セマフォ外）
+            await asyncio.sleep(delay_seconds)
+            return result
 
         # 並行実行
         tasks = [
@@ -223,13 +223,6 @@ class PlayerValidator:
             return None
         return await verify_url(url)
 
-    def _sanitize_input(self, text: str) -> str:
-        """
-        プロンプトインジェクション対策: ユーザー入力をサニタイズ
-        ※ 共通サニタイザー core.sanitizer.sanitize_input() に委譲
-        """
-        return sanitize_input(text)
-
     async def _query_latest_info(
         self,
         player_name: str,
@@ -241,10 +234,10 @@ class PlayerValidator:
         """LLMに最新情報を問い合わせ"""
 
         # 入力をサニタイズ（プロンプトインジェクション対策）
-        safe_player_name = self._sanitize_input(player_name)
-        safe_company_name = self._sanitize_input(company_name)
-        safe_industry = self._sanitize_input(industry) if industry else ""
-        safe_url = self._sanitize_input(official_url)
+        safe_player_name = sanitize_input(player_name)
+        safe_company_name = sanitize_input(company_name)
+        safe_industry = sanitize_input(industry) if industry else ""
+        safe_url = sanitize_input(official_url)
 
         industry_context = f"（{safe_industry}業界）" if safe_industry else ""
         definition_context = f"\n【業界定義・範囲】\n{sanitize_input(definition)}\n" if definition else ""
@@ -424,7 +417,7 @@ async def main():
 
     args = parser.parse_args()
 
-    print(f"\n🔍 プレイヤー正誤チェッカー")
+    print(f"\n[SEARCH] プレイヤー正誤チェッカー")
     print(f"入力: {args.excel_file}")
     print()
 
@@ -436,7 +429,7 @@ async def main():
     if args.limit:
         players = players[:args.limit]
 
-    print(f"📋 プレイヤー数: {len(players)}件")
+    print(f"[INFO] プレイヤー数: {len(players)}件")
     print()
 
     # バリデーション実行
@@ -454,7 +447,7 @@ async def main():
     # 結果サマリー
     print()
     print("=" * 50)
-    print("📊 チェック結果サマリー")
+    print("[RESULT] チェック結果サマリー")
     print("=" * 50)
 
     alert_counts = {}
@@ -467,7 +460,7 @@ async def main():
 
     # 問題のあるプレイヤーを表示
     print()
-    print("⚠️ 変更・問題があるプレイヤー:")
+    print("[WARN] 変更・問題があるプレイヤー:")
     for result in results:
         if result.alert_level != AlertLevel.OK:
             print(f"  {result.alert_level.value} {result.player_name_original}")
@@ -481,7 +474,7 @@ async def main():
         exporter = ValidationReportExporter()
         output_path = exporter.export(results, args.output)
         print()
-        print(f"💾 結果を保存: {output_path}")
+        print(f"[SAVE] 結果を保存: {output_path}")
 
 
 if __name__ == "__main__":

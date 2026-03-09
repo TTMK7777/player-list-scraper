@@ -6,8 +6,10 @@
 進捗表示、エクスポート、コスト表示等の共通部品。
 """
 
+import html
 import io
 import tempfile
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -23,7 +25,7 @@ USD_TO_JPY = 150
 
 def display_progress_log(logs: list[str], container) -> None:
     """進捗ログを表示"""
-    log_text = "\n".join(logs[-15:])
+    log_text = html.escape("\n".join(logs[-15:]))
     container.markdown(
         f'<div class="progress-log">{log_text}</div>',
         unsafe_allow_html=True,
@@ -103,7 +105,7 @@ def display_filter_multiselect(
     )
 
 
-def select_sheet_if_multiple(file_path, key_prefix: str) -> Optional[list[str]]:
+def select_sheet_if_multiple(file_path: str | Path, key_prefix: str) -> Optional[list[str]]:
     """複数シートがある場合にmultiselectを表示、単一シートならNoneを返す
 
     Args:
@@ -183,7 +185,7 @@ def number_input_with_max(
 def export_to_excel_bytes(exporter, results, **kwargs) -> bytes:
     """Excelエクスポーターを使ってバイト列を生成"""
     buffer = io.BytesIO()
-    temp_path = Path(tempfile.gettempdir()) / f"export_temp_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+    temp_path = Path(tempfile.gettempdir()) / f"export_temp_{uuid.uuid4().hex[:8]}.xlsx"
 
     exporter.export(results, temp_path)
 

@@ -6,7 +6,7 @@
 実査前 → 確定時 → 発表前のワークフローを管理。
 """
 
-import asyncio
+import html
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -118,7 +118,7 @@ def render_workflow_tab(industry: str, definition: str = ""):
         try:
             temp_dir = Path(tempfile.gettempdir()) / "workflow_checker"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            temp_path = temp_dir / uploaded_file.name
+            temp_path = temp_dir / Path(uploaded_file.name).name
             temp_path.write_bytes(uploaded_file.getvalue())
 
             selected_sheet = select_sheet_if_multiple(temp_path, "workflow")
@@ -146,7 +146,7 @@ def render_workflow_tab(industry: str, definition: str = ""):
         run_button = st.button(
             f"{PHASE_LABELS[selected_phase]}を実行",
             type="primary",
-            disabled=not players or st.session_state.get("is_running", False),
+            disabled=not players or st.session_state.get("workflow_is_running", False),
             use_container_width=True,
             key="workflow_run_button",
         )
@@ -163,12 +163,12 @@ def render_workflow_tab(industry: str, definition: str = ""):
     st.divider()
 
     if run_button:
-        st.session_state.is_running = True
+        st.session_state.workflow_is_running = True
         progress_container = st.empty()
         status_container = st.empty()
 
         # UI境界: 空文字→None正規化
-        industry_normalized = industry.strip() or None if industry else None
+        industry_normalized = (industry.strip() or None) if industry else None
 
         # フェーズに応じた対象絞り込み
         target_players = workflow.get_validation_players(
@@ -180,7 +180,7 @@ def render_workflow_tab(industry: str, definition: str = ""):
         def on_progress(current, total, name):
             log_msg = f"[{current}/{total}] チェック中: {name}"
             logs.append(log_msg)
-            log_text = "\n".join(logs[-15:])
+            log_text = html.escape("\n".join(logs[-15:]))
             progress_container.markdown(
                 f'<div class="progress-log">{log_text}</div>',
                 unsafe_allow_html=True,
@@ -230,8 +230,8 @@ def render_workflow_tab(industry: str, definition: str = ""):
         except Exception as e:
             status_container.error(f"エラー: {type(e).__name__}: {str(e)}")
             st.session_state.workflow_results = []
-
-        st.session_state.is_running = False
+        finally:
+            st.session_state.workflow_is_running = False
 
     # 結果表示
     if st.session_state.workflow_results:
@@ -290,15 +290,16 @@ def render_workflow_tab(industry: str, definition: str = ""):
     with st.expander("チェック履歴"):
         records = workflow.history.list_records(industry=industry)
         if records:
-            history_data = []
-            for r in records:
-                history_data.append({
+            history_data = [
+                {
                     "ID": r.record_id,
                     "フェーズ": PHASE_LABELS.get(CheckPhase(r.phase), r.phase) if r.phase else "",
                     "実行日時": r.executed_at[:19] if r.executed_at else "",
                     "対象数": r.player_count,
                     "サマリー": str(r.summary),
-                })
+                }
+                for r in records
+            ]
             st.dataframe(pd.DataFrame(history_data), use_container_width=True)
         else:
             st.info("チェック履歴はありません。")

@@ -212,23 +212,23 @@ class TestStoreInvestigator:
         assert investigator.model == "gemini-2.5-pro"
 
     def test_sanitize_input(self, mock_llm_client_success):
-        """入力サニタイズテスト"""
-        investigator = StoreInvestigator(llm_client=mock_llm_client_success)
+        """入力サニタイズテスト（core.sanitizer.sanitize_input を直接使用）"""
+        from core.sanitizer import sanitize_input
 
         # 通常入力
-        assert investigator._sanitize_input("テスト株式会社") == "テスト株式会社"
+        assert sanitize_input("テスト株式会社") == "テスト株式会社"
 
         # 危険なパターン
-        assert "[REMOVED]" in investigator._sanitize_input("ignore instructions テスト")
-        assert "[REMOVED]" in investigator._sanitize_input("system prompt テスト")
+        assert "[REMOVED]" in sanitize_input("ignore instructions テスト")
+        assert "[REMOVED]" in sanitize_input("system prompt テスト")
 
         # 長さ制限
         long_input = "あ" * 1000
-        assert len(investigator._sanitize_input(long_input)) == 500
+        assert len(sanitize_input(long_input)) == 500
 
         # 空入力
-        assert investigator._sanitize_input("") == ""
-        assert investigator._sanitize_input(None) == ""
+        assert sanitize_input("") == ""
+        assert sanitize_input(None) == ""
 
     @pytest.mark.asyncio
     async def test_investigate_ai_mode(self, mock_llm_client_success):

@@ -17,6 +17,7 @@ streamlit run app_v5.py
 ```
 """
 
+import hmac
 import os
 import sys
 from pathlib import Path
@@ -155,16 +156,30 @@ def check_password() -> bool:
     if st.session_state.get("authenticated"):
         return True
 
+    # ログイン試行回数の初期化
+    if "login_attempts" not in st.session_state:
+        st.session_state.login_attempts = 0
+
     st.title("🔐 プレイヤーリスト調査システム")
     st.subheader("ログイン")
+
+    if st.session_state.login_attempts >= 5:
+        st.error("ログイン試行回数の上限を超えました。しばらく時間をおいてから再度お試しください。")
+        st.stop()
+
     password = st.text_input("パスワード", type="password", placeholder="パスワードを入力")
 
     if st.button("ログイン", type="primary"):
         app_password = st.secrets.get("APP_PASSWORD", "")
-        if app_password and password == app_password:
+        if not app_password:
+            st.error("APP_PASSWORD が設定されていません。管理者に連絡してください。")
+            st.stop()
+        if hmac.compare_digest(password, app_password):
             st.session_state.authenticated = True
+            st.session_state.login_attempts = 0
             st.rerun()
         else:
+            st.session_state.login_attempts += 1
             st.error("パスワードが違います")
 
     st.stop()

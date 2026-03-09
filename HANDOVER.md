@@ -1,8 +1,71 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-03-02
+> **最終更新**: 2026-03-09
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v7.0
+> **バージョン**: v7.0.1
+
+## セッション: 2026-03-09
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | コードドクター全65件修正（CRITICAL 1 + HIGH 13 + MEDIUM 27 + LOW 24） |
+| **変更ファイル** | 24ファイル変更 + 1新規（+447行 -240行） |
+| **テスト** | 438件全パス（405既存 + 33新規、回帰なし） |
+| **品質ゲート** | 4並列コードレビュー → 3フェーズ修正 → 全テストパス |
+| **ステータス** | 完了 |
+
+### 修正概要（3フェーズ構成）
+
+#### Phase 1: セキュリティ (8件)
+- **XSS防止**: `html.escape()` を ui/ 4ファイルに適用
+- **プロンプトインジェクション**: `DANGEROUS_PATTERNS` 9パターン追加 + context に `sanitize_input()` 適用
+- **認証改善**: `hmac.compare_digest()` + 試行回数制限(5回) + 空パスワード防御
+- **パストラバーサル**: `Path(...).name` で5箇所サニタイズ
+- **SSRF防止**: `_validate_url()` メソッド新設（スキーム+プライベートIP検証）
+- **HTTPエラー**: `raise_for_status()` を全HTTPリクエスト箇所に追加
+
+#### Phase 2: バグ修正 (13件)
+- **並列化修正**: `attribute_investigator` の for→gather 変換
+- **イベントループ保護**: `store_investigator` の `llm.call()` を `asyncio.to_thread` 化
+- **セマフォ最適化**: sleep をセマフォ外に移動（player_validator + store_investigator）
+- **session_state分離**: `is_running` → `attr_is_running` / `workflow_is_running`
+- **finally パターン**: is_running 確実リセット（attribute_tab + player_trend_tab）
+- **原子的保存**: `os.replace()` 統一（check_history + investigation_templates）
+- **例外処理**: `KeyboardInterrupt` 非捕捉、正規表現 non-greedy 化
+
+#### Phase 3: MEDIUM+LOW改善 (56件 + auto-fix 7件)
+- **パフォーマンス**: `compute_diff` O(N²)→O(N+MK)、URL検証並列化（`asyncio.gather`）
+- **非同期統一**: `run_in_executor` → `asyncio.to_thread` 2箇所統一
+- **コード品質**: `_deduplicate` キー統一（3戦略）、`_sanitize_input` ラッパー廃止、デッドコード削除
+- **型ヒント**: `Optional[str]`/`Optional[int]` 修正8箇所、戻り値型ヒント追加
+- **堅牢性**: `_executor._shutdown` ガード、三項演算子の優先順位明確化（4箇所）
+- **セキュリティ残件**: `_validate_url` を `_scrape_page` にも追加、`unsafe_allow_html` 排除
+
+### 新規テスト (33件)
+- `test_sanitizer.py`: 新パターン19件（`TestNewDangerousPatterns`）
+- `test_llm_client.py`: non-greedy JSON + KeyboardInterrupt 伝播 2件
+- `test_store_scraper_v3.py` (新規): SSRF防止8件 + HTTPエラー4件
+
+### 主な変更ファイル
+| ファイル群 | 変更数 | 主な修正 |
+|-----------|--------|---------|
+| `core/` (8ファイル) | 16件 | O(N²)改善、例外処理、原子的保存、型ヒント |
+| `investigators/` (5ファイル) | 15件 | gather並列化、to_thread統一、URL検証並列化 |
+| `ui/` (5ファイル) | 18件 | XSS、session_state分離、finally化、型ヒント |
+| `app_v5.py` + `store_scraper_v3.py` | 15件 | 認証、SSRF、raise_for_status、dedup統一 |
+| `tests/` (5ファイル) | 33件 | 新規テスト + _sanitize_input テスト更新 |
+
+### 未完了・継続課題
+- [ ] 正誤チェック解析失敗の対策実装（ログ確認後）
+- [R] `excel_handler.py` SRP違反解消
+- [E] テンプレートIDのASCIIスラッグ化
+- [E] カテゴリ値対応（boolean以外の多値分類）
+- [E] LLMClient の AsyncContextManager 化
+- [E] `store_scraper_v3.py` 1,550行を戦略別モジュールに分割
+- [E] `StaticHTMLStrategy` インスタンス毎回生成の改善（TODO コメント追記済み）
+
+---
 
 ## セッション: 2026-03-02 (5)
 

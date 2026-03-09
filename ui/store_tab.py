@@ -63,7 +63,7 @@ async def _run_investigation(
         return []
 
 
-def _display_summary(results: list[StoreInvestigationResult]):
+def _display_summary(results: list[StoreInvestigationResult]) -> None:
     """店舗調査結果サマリーを表示"""
 
     total_stores = sum((r.total_stores or 0) for r in results)
@@ -157,22 +157,18 @@ def _export_results(results: list[StoreInvestigationResult]) -> bytes:
     return buffer.getvalue()
 
 
-def _display_scraping_warning():
+def _display_scraping_warning() -> None:
     """スクレイピングモードの注意事項を表示"""
-    st.markdown("""
-    <div class="warning-box">
-    <h4>⚠️ スクレイピングモードの注意事項</h4>
-    <ul>
-        <li>対象サイトの利用規約を必ずご確認ください</li>
-        <li>robots.txt で禁止されている場合は使用しないでください</li>
-        <li>本機能の使用による法的問題は利用者の責任となります</li>
-        <li>社内利用のみを推奨します（外部公開データへの使用は非推奨）</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    st.warning(
+        "**スクレイピングモードの注意事項**\n\n"
+        "- 対象サイトの利用規約を必ずご確認ください\n"
+        "- robots.txt で禁止されている場合は使用しないでください\n"
+        "- 本機能の使用による法的問題は利用者の責任となります\n"
+        "- 社内利用のみを推奨します（外部公開データへの使用は非推奨）"
+    )
 
 
-def _display_company_detail(result: StoreInvestigationResult):
+def _display_company_detail(result: StoreInvestigationResult) -> None:
     """企業別詳細を表示"""
     stores_display = result.total_stores or 0
     with st.expander(f"{'⚠️' if result.needs_verification else '✅'} {result.company_name} - {stores_display}店舗"):
@@ -277,7 +273,7 @@ def render_store_tab():
             try:
                 temp_dir = Path(tempfile.gettempdir()) / "store_investigator"
                 temp_dir.mkdir(parents=True, exist_ok=True)
-                temp_path = temp_dir / uploaded_file.name
+                temp_path = temp_dir / Path(uploaded_file.name).name
                 temp_path.write_bytes(uploaded_file.getvalue())
 
                 selected_sheet = select_sheet_if_multiple(temp_path, "store")
@@ -388,7 +384,7 @@ def render_store_tab():
 
         companies_to_check = st.session_state.store_companies[:check_limit]
         # UI境界: 空文字→None正規化
-        industry_normalized = industry.strip() or None if industry else None
+        industry_normalized = (industry.strip() or None) if industry else None
         # companies の industry も正規化
         for c in companies_to_check:
             c["industry"] = industry_normalized
@@ -436,9 +432,7 @@ def render_store_tab():
             )
 
         with col2:
-            csv_data = []
-            for result in results:
-                csv_data.append(result.to_dict())
+            csv_data = [result.to_dict() for result in results]
             df_csv = pd.DataFrame(csv_data)
             csv_bytes = df_csv.to_csv(index=False).encode("utf-8-sig")
 

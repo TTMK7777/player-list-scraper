@@ -7,6 +7,7 @@
 3つのサブタブ（st.tabs）で構成。
 """
 
+import html
 import io
 import tempfile
 from datetime import datetime
@@ -77,7 +78,7 @@ def _render_shared_upload() -> None:
         try:
             temp_dir = Path(tempfile.gettempdir()) / "player_trend"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            temp_path = temp_dir / uploaded_file.name
+            temp_path = temp_dir / Path(uploaded_file.name).name
             temp_path.write_bytes(uploaded_file.getvalue())
 
             selected_sheet = select_sheet_if_multiple(temp_path, "trend")
@@ -284,7 +285,7 @@ def _export_validation_results(results: list[ValidationResult]) -> bytes:
         worksheet = writer.sheets["チェック結果"]
         for idx, col in enumerate(df_report.columns):
             max_length = max(
-                df_report[col].astype(str).map(len).max(),
+                df_report[col].astype(str).str.len().max(),
                 len(col),
             ) + 2
             worksheet.column_dimensions[get_column_letter(idx + 1)].width = min(max_length, 50)
@@ -342,7 +343,7 @@ def _render_validation_subtab(industry: str, definition: str) -> None:
 
         players_to_check = players[:check_limit]
         # UI境界: 空文字→None正規化
-        industry_normalized = industry.strip() or None if industry else None
+        industry_normalized = (industry.strip() or None) if industry else None
 
         try:
             results = run_async(_run_validation(
@@ -456,13 +457,14 @@ def _render_newcomer_subtab(industry: str, definition: str) -> None:
         status_container = st.empty()
 
         def on_progress(current: int, total: int, name: str) -> None:
+            safe_name = html.escape(name)
             progress_container.markdown(
-                f'<div class="progress-log">[{current}/{total}] {name}</div>',
+                f'<div class="progress-log">[{current}/{total}] {safe_name}</div>',
                 unsafe_allow_html=True,
             )
 
         # UI境界: 空文字→None正規化
-        industry_normalized = industry.strip() or None if industry else None
+        industry_normalized = (industry.strip() or None) if industry else None
         status_container.info("🔍 新規参入候補を検索中...")
 
         try:
@@ -482,8 +484,8 @@ def _render_newcomer_subtab(industry: str, definition: str) -> None:
         except Exception as e:
             status_container.error(f"❌ エラー: {type(e).__name__}: {str(e)}")
             st.session_state.trend_newcomer_candidates = []
-
-        st.session_state.trend_newcomer_is_running = False
+        finally:
+            st.session_state.trend_newcomer_is_running = False
 
     # 結果表示
     if st.session_state.trend_newcomer_candidates:
@@ -507,13 +509,12 @@ def _render_newcomer_subtab(industry: str, definition: str) -> None:
 
                 with col1:
                     key = f"trend_newcomer_select_{i}"
-                    if key not in st.session_state:
-                        st.session_state[key] = candidate.verification_status == "verified"
+                    st.session_state.setdefault(key, candidate.verification_status == "verified")
                     st.checkbox("", key=key, label_visibility="collapsed")
 
                 with col2:
                     st.markdown(
-                        f"**{candidate.player_name}** {badge}",
+                        f"**{html.escape(candidate.player_name)}** {badge}",
                         unsafe_allow_html=True,
                     )
                     if candidate.official_url:
@@ -661,7 +662,7 @@ def _export_compiled_excel(df: pd.DataFrame) -> bytes:
         worksheet = writer.sheets["最新版リスト"]
         for idx, col in enumerate(df_export.columns):
             max_length = max(
-                df_export[col].astype(str).map(len).max() if len(df_export) > 0 else 0,
+                df_export[col].astype(str).str.len().max() if len(df_export) > 0 else 0,
                 len(col),
             ) + 2
             worksheet.column_dimensions[get_column_letter(idx + 1)].width = min(max_length, 50)

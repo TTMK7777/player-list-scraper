@@ -173,10 +173,12 @@ class CheckHistory:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(index, f, ensure_ascii=False, indent=2)
 
-            # Windows: 既存ファイルがある場合は先に削除
-            if self.index_path.exists():
-                self.index_path.unlink()
-            os.rename(tmp_path, str(self.index_path))
+            # os.replace() はクロスプラットフォームで原子的にファイルを置換
+            os.replace(tmp_path, str(self.index_path))
+        except (KeyboardInterrupt, SystemExit):
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise
         except Exception:
             # 書き込み失敗時は一時ファイルを削除
             if os.path.exists(tmp_path):
@@ -200,7 +202,7 @@ class CheckHistory:
         """
         # record_id が未設定の場合、生成
         if not record.record_id:
-            record.record_id = str(uuid.uuid4())[:8]
+            record.record_id = str(uuid.uuid4())
 
         if not record.executed_at:
             record.executed_at = datetime.now().isoformat()
@@ -329,38 +331,45 @@ class CheckHistory:
         old_names = set(old_by_name.keys())
         new_names = set(new_by_name.keys())
 
-        # 新規プレイヤー（今回にはあるが前回にはない）
-        for name in new_names:
-            # 類似度チェック
-            found_match = False
-            for old_name in old_names:
-                if is_same_player(name, old_name):
-                    found_match = True
+        # フェーズ1: 完全一致でマッチング（O(N)）
+        exact_matches = old_names & new_names
+        unmatched_new = new_names - exact_matches
+        unmatched_old = old_names - exact_matches
+
+        # フェーズ2: 残りのみ類似度でマッチング（O(M*K)、M,K << N）
+        # new_name → old_name のマッピング
+        fuzzy_match_map: dict[str, str] = {}
+        matched_old_names: set[str] = set()
+        for name in unmatched_new:
+            for old_name in unmatched_old:
+                if old_name not in matched_old_names and is_same_player(name, old_name):
+                    fuzzy_match_map[name] = old_name
+                    matched_old_names.add(old_name)
                     break
-            if not found_match:
+
+        # 新規プレイヤー（今回にはあるが前回にはない）
+        for name in unmatched_new:
+            if name not in fuzzy_match_map:
                 report.new_players.append(name)
 
         # 削除プレイヤー（前回にはあるが今回にはない）
-        for name in old_names:
-            found_match = False
-            for new_name in new_names:
-                if is_same_player(name, new_name):
-                    found_match = True
-                    break
-            if not found_match:
+        for name in unmatched_old:
+            if name not in matched_old_names:
                 report.removed_players.append(name)
 
         # 共通プレイヤーの差分チェック
-        for name in new_names:
-            # 前回の対応するレコードを探す
-            old_record = None
-            for old_name in old_names:
-                if is_same_player(name, old_name):
-                    old_record = old_by_name[old_name]
-                    break
+        # マッチングマップを構築: new_name → old_name
+        match_map: dict[str, str] = {}
+        for name in exact_matches:
+            match_map[name] = name
+        match_map.update(fuzzy_match_map)
 
-            if old_record is None:
+        for name in new_names:
+            old_name = match_map.get(name)
+            if old_name is None:
                 continue  # 新規プレイヤーなのでスキップ
+
+            old_record = old_by_name[old_name]
 
             new_record = new_by_name[name]
 
@@ -423,12 +432,14 @@ class CheckHistory:
 
     def _format_attr(self, value) -> str:
         """属性値を表示形式に変換"""
-        if value is True:
+        if value is None:
+            return "?"
+        elif value is True:
             return "○"
         elif value is False:
             return "×"
         else:
-            return "?"
+            return str(value)
 
     def list_records(
         self,

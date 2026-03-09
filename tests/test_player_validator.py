@@ -203,21 +203,24 @@ class TestParseResponse:
 
 
 class TestSanitizeInput:
-    """_sanitize_input メソッドのテスト（プロンプトインジェクション対策）"""
+    """sanitize_input 関数のテスト（プロンプトインジェクション対策）
+
+    _sanitize_input ラッパーは廃止され、core.sanitizer.sanitize_input() を直接使用。
+    """
 
     def test_sanitize_normal_input(self):
         """正常な入力はそのまま返す"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("楽天カード")
+        result = sanitize_input("楽天カード")
 
         assert result == "楽天カード"
 
     def test_sanitize_newline_characters(self):
         """改行文字の正規化（共通サニタイザー仕様: \\nは保持、\\r/\\tは空白に）"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("テスト\n改行\rキャリッジ\tタブ")
+        result = sanitize_input("テスト\n改行\rキャリッジ\tタブ")
 
         assert "\r" not in result
         assert "\t" not in result
@@ -227,27 +230,27 @@ class TestSanitizeInput:
 
     def test_sanitize_multiple_spaces(self):
         """連続する空白を1つに圧縮"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("テスト    複数    空白")
+        result = sanitize_input("テスト    複数    空白")
 
         assert "    " not in result
         assert "テスト 複数 空白" == result
 
     def test_sanitize_code_block(self):
         """コードブロック記法をエスケープ"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("```json{\"hack\": true}```")
+        result = sanitize_input("```json{\"hack\": true}```")
 
         assert "```" not in result
-        assert "`‵`" in result
+        assert "[BACKTICK]" in result
 
     def test_sanitize_brackets(self):
         """プロンプト区切り文字をエスケープ"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("【攻撃】テスト")
+        result = sanitize_input("【攻撃】テスト")
 
         assert "【" not in result
         assert "】" not in result
@@ -255,25 +258,25 @@ class TestSanitizeInput:
 
     def test_sanitize_length_limit(self):
         """500文字を超える入力を切り詰め"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
         long_input = "A" * 600
-        result = validator._sanitize_input(long_input)
+        result = sanitize_input(long_input)
 
         assert len(result) == 500
 
     def test_sanitize_empty_string(self):
         """空文字列の処理"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("")
+        result = sanitize_input("")
 
         assert result == ""
 
     def test_sanitize_whitespace_only(self):
         """空白のみの入力"""
-        validator = PlayerValidator(llm_client=MagicMock())
+        from core.sanitizer import sanitize_input
 
-        result = validator._sanitize_input("   \n\t   ")
+        result = sanitize_input("   \n\t   ")
 
         assert result == ""

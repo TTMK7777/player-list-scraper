@@ -8,6 +8,7 @@ LLMレスポンスから取得した値を安全に数値に変換する。
 """
 
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,8 @@ def safe_float(
 def safe_int(
     value,
     default: int = 0,
-    min_val: int = None,
-    max_val: int = None,
+    min_val: Optional[int] = None,
+    max_val: Optional[int] = None,
 ) -> int:
     """
     安全にintに変換する。

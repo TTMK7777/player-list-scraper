@@ -12,6 +12,7 @@ AI調査をメインに、スクレイピングをオプションとして併存
 """
 
 import asyncio
+import json
 import re
 import sys
 from datetime import datetime
@@ -55,7 +56,7 @@ class StoreInvestigator:
     """
 
     # コスト概算用の単価（USD/API呼び出し）
-    COST_PER_CALL = 0.02
+    COST_PER_CALL = 0.02  # Gemini 2.5 Pro + 検索グラウンディング（1企業あたり概算）
 
     @staticmethod
     def estimate_cost(company_count: int, mode: str = "ai") -> dict:
@@ -130,13 +131,6 @@ class StoreInvestigator:
                 raise RuntimeError(f"スクレイパーの初期化に失敗: {e}")
         return self._scraper
 
-    def _sanitize_input(self, text: str) -> str:
-        """
-        入力をサニタイズ（プロンプトインジェクション対策）
-        ※ 共通サニタイザー core.sanitizer.sanitize_input() に委譲
-        """
-        return sanitize_input(text)
-
     async def investigate(
         self,
         company_name: str,
@@ -163,9 +157,9 @@ class StoreInvestigator:
                 on_progress(msg)
 
         # 入力サニタイズ
-        company_name = self._sanitize_input(company_name)
-        official_url = self._sanitize_input(official_url)
-        industry = self._sanitize_input(industry) if industry else None
+        company_name = sanitize_input(company_name)
+        official_url = sanitize_input(official_url)
+        industry = sanitize_input(industry) if industry else None
 
         if not company_name:
             return StoreInvestigationResult.create_error(
@@ -224,8 +218,10 @@ class StoreInvestigator:
         prompt = self._build_ai_prompt(company_name, official_url, industry, current_year)
 
         try:
-            # LLM呼び出し
-            response = llm.call(prompt, model=self.model, use_search=True, temperature=0.1)
+            # LLM呼び出し（イベントループブロック防止）
+            response = await asyncio.to_thread(
+                lambda: llm.call(prompt, model=self.model, use_search=True, temperature=0.1)
+            )
             log("LLMレスポンスを解析中...")
 
             # レスポンス解析
@@ -315,8 +311,6 @@ class StoreInvestigator:
         response: str,
     ) -> StoreInvestigationResult:
         """AIレスポンスを解析（pydantic スキーマでバリデーション）"""
-        import json
-
         # JSONを抽出
         json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response)
         if json_match:
@@ -591,8 +585,9 @@ class StoreInvestigator:
                     mode=mode,
                 )
 
-                await asyncio.sleep(delay_seconds)
-                return result
+            # API制限対策の遅延（セマフォ外）
+            await asyncio.sleep(delay_seconds)
+            return result
 
         # 並行実行
         tasks = [investigate_one(i, c) for i, c in enumerate(companies)]

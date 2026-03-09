@@ -143,6 +143,31 @@ class TestLLMClient:
 
             assert result == "Test response"
 
+    def test_extract_json_multiple_fragments_returns_first(self, monkeypatch):
+        """テキスト内に複数のJSON断片がある場合、最初のものだけを返す（non-greedyの検証）"""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+        client = LLMClient()
+
+        # テキスト中に2つのJSONオブジェクトが存在する
+        text = 'First: {"id": 1, "name": "first"} and then Second: {"id": 2, "name": "second"}'
+
+        result = client.extract_json(text)
+
+        # non-greedy 正規表現により最初の断片のみ取れる
+        assert result == {"id": 1, "name": "first"}
+
+    def test_keyboard_interrupt_propagates(self, monkeypatch):
+        """KeyboardInterrupt は call() 内で捕捉されずに伝播する"""
+        monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+
+        with patch('core.llm_client.LLMClient._call_gemini') as mock_gemini:
+            mock_gemini.side_effect = KeyboardInterrupt()
+
+            client = LLMClient()
+
+            with pytest.raises(KeyboardInterrupt):
+                client.call("Test prompt")
+
 
 class TestIsAPIAvailable:
     """is_api_available のテストクラス"""

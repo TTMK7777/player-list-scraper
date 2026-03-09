@@ -54,7 +54,7 @@ class LLMClient:
 
     def __init__(
         self,
-        api_key: str = None,
+        api_key: Optional[str] = None,
         enable_cache: bool = False,
     ):
         """
@@ -96,11 +96,16 @@ class LLMClient:
         Returns:
             生成されたテキスト
         """
+        # モデル名を正規化してからキャッシュキーを生成
+        resolved_model = model or DEFAULT_MODEL
+        if resolved_model in self.GEMINI_MODELS:
+            resolved_model = self.GEMINI_MODELS[resolved_model]
+
         # キャッシュチェック（有効時のみ）
         cache_key = None
         if self._cache is not None:
             full_prompt = f"{system_prompt or ''}|{prompt}"
-            cache_key = self._cache.make_key(full_prompt, model or "", temperature)
+            cache_key = self._cache.make_key(full_prompt, resolved_model, temperature)
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return cached
@@ -179,7 +184,13 @@ class LLMClient:
                 return response.text
             except ImportError:
                 raise RuntimeError("google-genai package is required: pip install google-genai")
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except Exception as e:
+                raise RuntimeError(f"Gemini API エラー (フォールバック): {e}")
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except AttributeError as e:
             raise RuntimeError(f"Gemini API レスポンス解析エラー: {e}")
         except Exception as e:
@@ -220,14 +231,14 @@ class LLMClient:
         if first_bracket >= 0 and (first_brace < 0 or first_bracket < first_brace):
             # [ が先に出現 → 配列パターンを先に試す
             patterns = [
-                (r'\[[\s\S]*\]', "array_greedy"),
-                (r'\{[\s\S]*\}', "object_greedy"),
+                (r'\[[\s\S]*?\]', "array_non_greedy"),
+                (r'\{[\s\S]*?\}', "object_non_greedy"),
             ]
         else:
             # { が先に出現（または両方ない） → オブジェクトパターンを先に試す
             patterns = [
-                (r'\{[\s\S]*\}', "object_greedy"),
-                (r'\[[\s\S]*\]', "array_greedy"),
+                (r'\{[\s\S]*?\}', "object_non_greedy"),
+                (r'\[[\s\S]*?\]', "array_non_greedy"),
             ]
 
         for pattern, _label in patterns:

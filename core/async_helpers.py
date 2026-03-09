@@ -64,7 +64,11 @@ def _get_executor() -> ThreadPoolExecutor:
         ThreadPoolExecutor: 共有のスレッドプールエグゼキュータ
     """
     global _executor
-    if _executor is None or _executor._shutdown:
+    try:
+        is_shutdown = _executor._shutdown
+    except AttributeError:
+        is_shutdown = False
+    if _executor is None or is_shutdown:
         _executor = ThreadPoolExecutor(
             max_workers=4, thread_name_prefix="async_runner"
         )
@@ -78,7 +82,7 @@ def _cleanup_executor():
     global _executor
     if _executor is not None:
         logger.debug("ThreadPoolExecutor をシャットダウンします")
-        _executor.shutdown(wait=False)
+        _executor.shutdown(wait=True)
         _executor = None
 
 

@@ -7,7 +7,6 @@
 TemplateManager によるテンプレート管理UIを提供。
 """
 
-import asyncio
 import re
 import tempfile
 from datetime import datetime
@@ -27,7 +26,7 @@ from core.investigation_templates import (
 from core.llm_client import LLMClient
 from core.sanitizer import sanitize_input
 from investigators.attribute_investigator import AttributeInvestigator
-from ui.common import display_cost_warning, export_to_excel_bytes, select_sheet_if_multiple, number_input_with_max
+from ui.common import display_cost_warning, display_progress_log, export_to_excel_bytes, select_sheet_if_multiple, number_input_with_max
 
 
 # ---------------------------------------------------------------------------
@@ -195,12 +194,12 @@ def _render_template_section(
                 try:
                     temp_dir = Path(tempfile.gettempdir()) / "template_import"
                     temp_dir.mkdir(parents=True, exist_ok=True)
-                    temp_path = temp_dir / excel_file.name
+                    temp_path = temp_dir / Path(excel_file.name).name
                     temp_path.write_bytes(excel_file.getvalue())
                     new_attrs_from_excel = tm.import_from_excel(temp_path)
                     st.success(f"{len(new_attrs_from_excel)}件の属性を読み込みました")
                     st.write(", ".join(new_attrs_from_excel))
-                except Exception as e:
+                except (ValueError, KeyError, OSError) as e:
                     st.error(f"Excel読み込みエラー: {e}")
 
         new_context = st.text_area(
@@ -296,7 +295,7 @@ def _render_player_input_section() -> None:
             try:
                 temp_dir = Path(tempfile.gettempdir()) / "attribute_investigator"
                 temp_dir.mkdir(parents=True, exist_ok=True)
-                temp_path = temp_dir / uploaded_file.name
+                temp_path = temp_dir / Path(uploaded_file.name).name
                 temp_path.write_bytes(uploaded_file.getvalue())
 
                 selected_sheet = select_sheet_if_multiple(temp_path, "attr")
@@ -405,7 +404,7 @@ def _render_investigation_section(
         run_button = st.button(
             "調査開始",
             type="primary",
-            disabled=not players or not attributes or st.session_state.get("is_running", False),
+            disabled=not players or not attributes or st.session_state.get("attr_is_running", False),
             use_container_width=True,
             key="attr_run_button",
         )
@@ -413,7 +412,7 @@ def _render_investigation_section(
     st.divider()
 
     if run_button:
-        st.session_state.is_running = True
+        st.session_state.attr_is_running = True
         progress_container = st.empty()
         status_container = st.empty()
 
@@ -424,11 +423,7 @@ def _render_investigation_section(
         def on_progress(current: int, total: int, name: str) -> None:
             log_msg = f"[{current}/{total}] 調査中: {name}"
             logs.append(log_msg)
-            log_text = "\n".join(logs[-15:])
-            progress_container.markdown(
-                f'<div class="progress-log">{log_text}</div>',
-                unsafe_allow_html=True,
-            )
+            display_progress_log(logs, progress_container)
 
         status_container.info(f"{len(players_to_check)}件のプレイヤーを調査中...")
 
@@ -452,8 +447,8 @@ def _render_investigation_section(
         except Exception as e:
             status_container.error(f"エラー: {type(e).__name__}: {str(e)}")
             st.session_state.attr_results = []
-
-        st.session_state.is_running = False
+        finally:
+            st.session_state.attr_is_running = False
 
 
 def _render_results_section(attributes: list[str]) -> None:
@@ -508,9 +503,7 @@ def _render_results_section(attributes: list[str]) -> None:
         )
 
     with col2:
-        csv_data = []
-        for r in results:
-            csv_data.append(r.to_dict())
+        csv_data = [r.to_dict() for r in results]
         df_csv = pd.DataFrame(csv_data)
         csv_bytes = df_csv.to_csv(index=False).encode("utf-8-sig")
 

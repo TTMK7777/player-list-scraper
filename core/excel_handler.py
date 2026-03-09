@@ -73,6 +73,7 @@ class ExcelHandler:
         self.sheet = None
         self.header_row = 1
         self.column_map: dict[str, int] = {}  # 列名 -> 列インデックス
+        self.logger = logging.getLogger(__name__)
 
     @staticmethod
     def get_sheet_names(file_path: str | Path) -> list[str]:
@@ -187,15 +188,13 @@ class ExcelHandler:
 
     def _read_row(self, row_idx: int) -> Optional[PlayerData]:
         """1行をPlayerDataに変換"""
-        logger = logging.getLogger(__name__)
-
         # プレイヤー名を取得
         player_name_col = self.column_map.get("_player_name")
         if player_name_col is None:
             # フォールバック: 列1を使用するが警告を出す
             player_name_col = 1
             if row_idx == self.header_row + 1:  # 最初の行でのみ警告
-                logger.warning(
+                self.logger.warning(
                     "プレイヤー名列が自動検出されませんでした。列1をフォールバックとして使用します。"
                 )
 

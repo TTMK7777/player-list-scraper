@@ -102,7 +102,7 @@ class ValidationResult:
         player_name: str,
         url: str = "",
         company_name: str = "",
-        source_urls: list[str] = None,
+        source_urls: Optional[list[str]] = None,
     ) -> "ValidationResult":
         """変更なしの結果を作成"""
         return cls(

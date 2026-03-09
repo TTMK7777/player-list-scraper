@@ -47,7 +47,7 @@ class AttributeInvestigator:
     """
 
     # コスト概算用の単価（USD/バッチ呼び出し）
-    COST_PER_BATCH_CALL = 0.03
+    COST_PER_BATCH_CALL = 0.03  # Gemini 2.5 Pro + 検索グラウンディング（バッチ1回あたり概算）
 
     def __init__(
         self,
@@ -157,24 +157,24 @@ class AttributeInvestigator:
 
         processed = 0
 
-        for batch_idx, batch in enumerate(batches):
+        async def process_batch(batch_idx: int, batch: list[dict]) -> list[AttributeInvestigationResult]:
+            nonlocal processed
             async with semaphore:
                 try:
                     batch_results = await self._investigate_single_batch(
                         batch, attributes, industry, context=context, definition=definition
                     )
-                    results.extend(batch_results)
                 except Exception as e:
                     # バッチ全体がエラーの場合、個別にエラー結果を生成
                     batch_names = [p.get("player_name", "?") for p in batch]
                     error_context = f"バッチ{batch_idx + 1} ({', '.join(batch_names)}): {e}"
-                    for player in batch:
-                        results.append(
-                            AttributeInvestigationResult.create_error(
-                                player_name=player.get("player_name", "不明"),
-                                error_message=error_context,
-                            )
+                    batch_results = [
+                        AttributeInvestigationResult.create_error(
+                            player_name=player.get("player_name", "不明"),
+                            error_message=error_context,
                         )
+                        for player in batch
+                    ]
 
                 processed += len(batch)
 
@@ -182,9 +182,15 @@ class AttributeInvestigator:
                     names = ", ".join(p.get("player_name", "?") for p in batch)
                     on_progress(processed, total, names)
 
-                # レート制限対策
-                if batch_idx < len(batches) - 1:
-                    await asyncio.sleep(delay_seconds)
+            # レート制限対策（セマフォ外）
+            await asyncio.sleep(delay_seconds)
+
+            return batch_results
+
+        tasks = [process_batch(i, b) for i, b in enumerate(batches)]
+        batch_results_list = await asyncio.gather(*tasks)
+        for batch_results in batch_results_list:
+            results.extend(batch_results)
 
         return results
 
@@ -214,9 +220,7 @@ class AttributeInvestigator:
         prompt = self._build_batch_prompt(players, attributes, industry, context=context, definition=definition)
 
         # LLM呼び出し（同期→非同期ラッパー）
-        loop = asyncio.get_running_loop()
-        raw_response = await loop.run_in_executor(
-            None,
+        raw_response = await asyncio.to_thread(
             lambda: llm.call(prompt, model=self.model, temperature=0.1, use_search=True)
         )
 
@@ -263,7 +267,8 @@ class AttributeInvestigator:
         definition_section = f"\n■業界定義・範囲\n{sanitize_input(definition)}\n" if definition else ""
 
         # コンテキストセクション（指定時のみ挿入）
-        context_section = f"\n■判定基準\n{context}\n" if context else ""
+        safe_context = sanitize_input(context, max_length=1000) if context else ""
+        context_section = f"\n■判定基準\n{safe_context}\n" if safe_context else ""
 
         prompt = f"""以下の{len(players)}つのサービス{industry_text}について、各属性の取り扱い有無を調査してください。
 

@@ -92,7 +92,7 @@ def get_builtin_templates():
             context="",
             batch_size=preset.get("batch_size"),
             is_builtin=True,
-            created_at="2026-02-17T00:00:00",
-            updated_at="2026-02-17T00:00:00",
+            created_at="2026-02-17T00:00:00",   # プリセット初版日付（固定値）
+            updated_at="2026-02-17T00:00:00",   # プリセット初版日付（固定値）
         ))
     return templates

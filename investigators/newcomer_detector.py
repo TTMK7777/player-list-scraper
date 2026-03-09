@@ -50,7 +50,7 @@ class NewcomerDetector:
     """
 
     # コスト概算用の単価（USD/API呼び出し）
-    COST_PER_CALL = 0.05  # 1回固定（検索グラウンディング付き）
+    COST_PER_CALL = 0.05  # Gemini 2.5 Pro + 検索グラウンディング（1回固定）
 
     @staticmethod
     def estimate_cost() -> dict:
@@ -114,17 +114,24 @@ class NewcomerDetector:
         if on_progress:
             on_progress(2, 3, f"URL検証中（{len(candidates)}件）...")
 
-        # Step 2: URL自動検証（全候補）
+        # Step 2: URL自動検証（全候補を並列実行）
+        urls_to_verify = [(i, c) for i, c in enumerate(candidates) if c.official_url]
+        verify_tasks = [self._verify_url(c.official_url) for _, c in urls_to_verify]
+        results = await asyncio.gather(*verify_tasks, return_exceptions=True)
+        for (i, candidate), result in zip(urls_to_verify, results):
+            if isinstance(result, Exception):
+                candidate.url_verified = False
+                candidate.verification_status = "url_error"
+                continue
+            if result.get("status_code", 0) in (200, 301, 302, 303, 307, 308):
+                candidate.url_verified = True
+                candidate.verification_status = "verified"
+            elif result.get("error"):
+                candidate.url_verified = False
+                candidate.verification_status = "url_error"
+        # URL未設定の候補は unverified
         for candidate in candidates:
-            if candidate.official_url:
-                url_result = await self._verify_url(candidate.official_url)
-                if url_result.get("status_code", 0) in (200, 301, 302, 303, 307, 308):
-                    candidate.url_verified = True
-                    candidate.verification_status = "verified"
-                elif url_result.get("error"):
-                    candidate.url_verified = False
-                    candidate.verification_status = "url_error"
-            else:
+            if not candidate.official_url:
                 candidate.verification_status = "unverified"
 
         if on_progress:
@@ -176,9 +183,7 @@ class NewcomerDetector:
 ]"""
 
         # LLM呼び出し（同期→非同期ラッパー）
-        loop = asyncio.get_running_loop()
-        raw_response = await loop.run_in_executor(
-            None,
+        raw_response = await asyncio.to_thread(
             lambda: llm.call(prompt, model=self.model, temperature=0.1, use_search=True)
         )
 
@@ -217,7 +222,7 @@ class NewcomerDetector:
 
             # URLサニタイズ
             official_url = sanitize_url(parsed.official_url)
-            source_urls = [sanitize_url(u) for u in parsed.source_urls if u]
+            source_urls = [u for u in (sanitize_url(s) for s in parsed.source_urls if s) if u]
 
             candidate = NewcomerCandidate(
                 player_name=parsed.player_name.strip(),

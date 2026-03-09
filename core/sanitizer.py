@@ -22,6 +22,15 @@ DANGEROUS_PATTERNS = [
     r"<\|.*\|>",
     r"\{\{.*\}\}",
     r"```.*system",
+    r"act\s+as",
+    r"\bDAN\b",
+    r"jailbreak",
+    r"SYSTEM:",
+    r"do\s+anything\s+now",
+    r"bypass.*(?:filter|restriction|rule)",
+    r"pretend.*(?:you\s+are|to\s+be)",
+    r"new\s+instructions?",
+    r"override.*(?:instructions?|rules?)",
 ]
 
 
@@ -64,7 +73,7 @@ def sanitize_input(text: str, max_length: int = 500) -> str:
     sanitized = re.sub(r'[ ]{2,}', ' ', sanitized)
 
     # プロンプト区切り文字をエスケープ
-    sanitized = sanitized.replace('```', '`‵`')
+    sanitized = sanitized.replace('```', '[BACKTICK][BACKTICK][BACKTICK]')
     sanitized = sanitized.replace('【', '[').replace('】', ']')
 
     # 長さ制限

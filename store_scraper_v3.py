@@ -16,6 +16,7 @@
 """
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -87,7 +88,7 @@ CRAWL_SLEEP_INTERVAL = 0.5    # クロール間スリープ（秒）
 PREF_SLEEP_INTERVAL = 0.3     # 都道府県間スリープ（秒）
 MAX_PAGES_TO_SCRAPE = 10      # 最大スクレイピングページ数
 MAX_BROWSER_PAGES = 15         # ブラウザ最大ページ数
-MAX_PREFECTURES = 47           # 都道府県数
+MAX_PREFECTURES = 47           # 日本の都道府県数（47都道府県の上限）
 MAX_HTML_LENGTH = 50000        # HTML最大長
 
 
@@ -111,9 +112,6 @@ PREFECTURES = [
     "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
 ]
 
-
-# 郵便番号上位3桁 → 都道府県マッピング（core.postal_prefecture から参照）
-POSTAL_PREF_MAP = POSTAL_PREFIX_MAP
 
 
 def extract_full_address(text: str) -> str:
@@ -259,6 +257,17 @@ class ScrapingStrategy(ABC):
     def pages_visited(self) -> int:
         """訪問ページ数を返す"""
         return self._pages_visited
+
+    def _deduplicate(self, stores: list[StoreInfo]) -> list[StoreInfo]:
+        """重複除去（店舗名+住所で判定）"""
+        seen = set()
+        unique = []
+        for store in stores:
+            key = f"{store.store_name}_{store.address}"
+            if key not in seen:
+                seen.add(key)
+                unique.append(store)
+        return unique
 
     @abstractmethod
     async def scrape(
@@ -445,6 +454,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
         response = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
+        response.raise_for_status()
         self._count_page_visit()
         response.encoding = response.apparent_encoding
         html = response.text
@@ -717,6 +727,7 @@ class StaticHTMLStrategy(ScrapingStrategy):
                     store_name = link.get_text(strip=True)
 
                 # 「○○店」「○○教室」形式かチェック
+                # len < 25: 店舗名として妥当な長さの閾値。長すぎるテキストはメニュー項目等のノイズの可能性が高い
                 if store_name and ("店" in store_name or "教室" in store_name or len(store_name) < 25):
                     store_name = re.sub(r'\s+', '', store_name)
                     # ノイズ除外
@@ -889,8 +900,8 @@ class StaticHTMLStrategy(ScrapingStrategy):
                 if not has_postal and not has_pref and len(store.address) < 10:
                     continue
 
-            # 重複チェック（店舗名のみでも重複判定）
-            key = store.store_name
+            # 重複チェック（店舗名+住所で統一判定）
+            key = f"{store.store_name}_{store.address}"
             if key not in seen:
                 seen.add(key)
                 unique.append(store)
@@ -1099,19 +1110,10 @@ class BrowserAutomationStrategy(ScrapingStrategy):
         llm: LLMClient
     ) -> list[StoreInfo]:
         """静的解析と同じLLM抽出を使用"""
+        # TODO: L3 — StaticHTMLStrategy() を毎回生成している。
+        # コンストラクタで保持するか、_extract_stores_with_llm をモジュールレベル関数に昇格を検討。
         static = StaticHTMLStrategy()
         return await static._extract_stores_with_llm(html, company_name, page_url, llm)
-
-    def _deduplicate(self, stores: list[StoreInfo]) -> list[StoreInfo]:
-        """重複除去"""
-        seen = set()
-        unique = []
-        for store in stores:
-            key = f"{store.store_name}_{store.address}"
-            if key not in seen:
-                seen.add(key)
-                unique.append(store)
-        return unique
 
 
 # ====================================
@@ -1195,6 +1197,7 @@ class AIInferenceStrategy(ScrapingStrategy):
         response = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
+        response.raise_for_status()
         self._count_page_visit()
         response.encoding = response.apparent_encoding
         html = response.text
@@ -1239,6 +1242,21 @@ class AIInferenceStrategy(ScrapingStrategy):
 
         return {"api_endpoint": None, "prefecture_urls": [], "recommended_approach": "crawl"}
 
+    @staticmethod
+    def _validate_url(url: str) -> None:
+        """SSRF防止: URLスキームとホストを検証"""
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"許可されていないURLスキーム: {parsed.scheme}")
+        try:
+            ip = ipaddress.ip_address(parsed.hostname)
+            if ip.is_private or ip.is_loopback or ip.is_reserved:
+                raise ValueError(f"プライベート/ローカルIPへのアクセスは禁止: {parsed.hostname}")
+        except ValueError as e:
+            if "プライベート" in str(e) or "許可されていない" in str(e):
+                raise
+            # ホスト名がIPアドレスでない場合は通過（通常のドメイン名）
+
     async def _fetch_from_api(
         self,
         api_url: str,
@@ -1246,10 +1264,12 @@ class AIInferenceStrategy(ScrapingStrategy):
         llm: LLMClient
     ) -> list[StoreInfo]:
         """APIから店舗情報を取得"""
+        self._validate_url(api_url)
         try:
             response = await asyncio.to_thread(
                 requests.get, api_url, headers=HEADERS, timeout=REQUEST_TIMEOUT
             )
+            response.raise_for_status()
             self._count_page_visit()
             data = response.json()
 
@@ -1295,10 +1315,14 @@ class AIInferenceStrategy(ScrapingStrategy):
         llm: LLMClient
     ) -> list[StoreInfo]:
         """静的解析でページをスクレイピング"""
+        self._validate_url(url)
+        # TODO: L3 — StaticHTMLStrategy() を毎回生成している。
+        # コンストラクタで保持するか、_extract_stores_with_llm をモジュールレベル関数に昇格を検討。
         static = StaticHTMLStrategy()
         html_resp = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
+        html_resp.raise_for_status()
         self._count_page_visit()
         html_resp.encoding = html_resp.apparent_encoding
         return await static._extract_stores_with_llm(html_resp.text, company_name, url, llm)
@@ -1353,17 +1377,6 @@ class AIInferenceStrategy(ScrapingStrategy):
 
         return []
 
-    def _deduplicate(self, stores: list[StoreInfo]) -> list[StoreInfo]:
-        """重複除去"""
-        seen = set()
-        unique = []
-        for store in stores:
-            key = f"{store.store_name}_{store.address}"
-            if key not in seen:
-                seen.add(key)
-                unique.append(store)
-        return unique
-
 
 # ====================================
 # メインスクレイパー
@@ -1376,7 +1389,7 @@ class MultiStrategyScraper:
 
     def __init__(
         self,
-        api_key: str = None,
+        api_key: Optional[str] = None,
         min_stores: int = 3
     ):
         """
