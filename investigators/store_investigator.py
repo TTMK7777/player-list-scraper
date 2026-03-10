@@ -261,27 +261,35 @@ class StoreInvestigator:
         industry_hint = f"\n【業界】{industry}" if industry else ""
 
         # 都道府県リストをJSON形式で生成
-        pref_template = ", ".join([f'"{p}": true/false/null' for p in self.PREFECTURES[:5]])
+        pref_template = ", ".join([f'"{p}": 数値/0/null' for p in self.PREFECTURES[:5]])
 
         return f"""
-「{company_name}」の店舗展開状況を調査してください。
+「{company_name}」の店舗・教室・拠点の展開状況を調査してください。
 {url_hint}{industry_hint}
 
 【最重要】以下の手順で調査してください:
-1. まず「{company_name} 店舗一覧」「{company_name} 店舗検索」で検索
-2. 公式サイトの店舗一覧/店舗検索ページを特定（URLを記録）
-3. 店舗一覧から各都道府県への展開有無を確認
+1. まず「{company_name}」の関連ブランド・サービス名を特定
+   （例: 企業名「Z会」→「Z会教室」「Z会進学教室」等）
+2. 企業名+ブランド名それぞれで「○○ 店舗一覧」「○○ 教室一覧」を検索
+3. 公式サイトの店舗/教室一覧ページを特定（URLを記録）
+4. 各都道府県の概算店舗・教室数を確認
 
-【都道府県の判定ルール】（厳格に適用）
-- 店舗一覧に該当都道府県の店舗が**1件でも**あれば → true
-- 店舗一覧で確認し、該当都道府県に**店舗がなければ** → false
-- 店舗一覧ページ自体が**見つからない/アクセスできない場合のみ** → null
+【ブランド展開の注意】
+- 企業名とサービスブランド名が異なる場合がある
+- 複数ブランド展開時は全ブランドの合計をカウント
+- オンライン専業で物理拠点がない場合は total_stores: 0 が正しい
+
+【都道府県の判定ルール】
+- 店舗一覧から各都道府県の概算店舗・教室数を整数で回答（例: 25）
+- 該当都道府県に店舗なしと確認 → 0
+- 店舗一覧ページ自体が見つからない/アクセスできない場合のみ → null
 
 【重要な注意】
 - 「不明だから null」ではなく「店舗一覧を確認した結果」で判断すること
-- 店舗一覧が存在するなら、全都道府県を true/false で判定可能
+- 店舗一覧が存在するなら、全都道府県を数値/0 で判定可能
 - 店舗一覧ページのURLは必ず store_list_url と sources に含める
-- {current_year}年以降の最新情報を優先
+- {current_year}年時点の最新店舗データを優先
+- 閉店済み・統合済みの店舗は除外し、現在営業中のみカウント
 
 【出力形式】JSON
 ```json
@@ -300,7 +308,7 @@ class StoreInvestigator:
 ```
 
 **重要**:
-- prefecture_presence は「店舗数」ではなく「店舗があるかどうか」を true/false/null で回答
+- prefecture_presence は各都道府県の概算店舗・教室数を整数（0以上）または null で回答
 - store_list_url は店舗一覧/店舗検索ページのURLを必ず記載（見つからない場合は null）
 - 全47都道府県について回答: {', '.join(self.PREFECTURES)}
 """
@@ -350,20 +358,21 @@ class StoreInvestigator:
         # 都道府県データ（新形式: prefecture_presence / 旧形式: prefecture_distribution）
         prefecture_presence = parsed.prefecture_presence or parsed.prefecture_distribution
 
-        # 都道府県別有無データを正規化
+        # 都道府県別店舗数データを正規化（数値保持）
+        # 注意: bool は int のサブクラスなので is True/False を先に判定
         prefecture_distribution = None
         if isinstance(prefecture_presence, dict):
             prefecture_distribution = {}
             for pref in self.PREFECTURES:
                 value = prefecture_presence.get(pref)
                 if value is True:
-                    prefecture_distribution[pref] = True
+                    prefecture_distribution[pref] = 1  # 旧形式互換
                 elif value is False:
-                    prefecture_distribution[pref] = False
-                elif isinstance(value, int) and value > 0:
-                    prefecture_distribution[pref] = True
-                elif isinstance(value, int) and value == 0:
-                    prefecture_distribution[pref] = False
+                    prefecture_distribution[pref] = 0  # 旧形式互換
+                elif isinstance(value, (int, float)) and value > 0:
+                    prefecture_distribution[pref] = int(value)
+                elif isinstance(value, (int, float)) and value == 0:
+                    prefecture_distribution[pref] = 0
                 else:
                     prefecture_distribution[pref] = None
 

@@ -568,21 +568,22 @@ class StoreInvestigationExporter:
             "TRUE" if result.needs_verification else "FALSE",
         ]
 
-        # 都道府県別データ（○/×/?形式）
+        # 都道府県別データ（数値 / ○×互換）
+        # 注意: bool は int のサブクラスなので is True/False を先に判定
         if self.include_prefectures:
             pref_dist = result.prefecture_distribution or {}
             for pref in self.PREFECTURES:
                 value = pref_dist.get(pref)
                 if value is True:
-                    row_data.append("○")  # 店舗あり
+                    row_data.append("○")        # 旧データ互換
                 elif value is False:
-                    row_data.append("×")  # 店舗なし
+                    row_data.append("×")        # 旧データ互換
                 elif isinstance(value, int) and value > 0:
-                    row_data.append("○")  # 旧形式（数値）の場合
-                elif value == 0:
-                    row_data.append("×")  # 0店舗
+                    row_data.append(value)      # 数値をそのまま出力
+                elif isinstance(value, int) and value == 0:
+                    row_data.append(0)
                 else:
-                    row_data.append("?")  # 不明
+                    row_data.append("?")
 
         # 後続データ
         source_urls = "\n".join(result.source_urls) if result.source_urls else ""

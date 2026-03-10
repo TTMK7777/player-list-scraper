@@ -1,8 +1,49 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-03-09
+> **最終更新**: 2026-03-10
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v7.0.1
+> **バージョン**: v7.1
+
+## セッション: 2026-03-10
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v7.1: 現場FB対応 — 全investigator期間制約 + 店舗調査精度向上 + 都道府県別数値 |
+| **変更ファイル** | 9ファイル変更（+137行 -34行） |
+| **テスト** | 467件全パス（464既存 + 3新規、回帰なし） |
+| **品質ゲート** | コードドクター → HIGH 1件修正（bool⊂int 分岐順序バグ） |
+| **ステータス** | 完了 |
+
+### 改修A: 全investigatorプロンプトに動的期間制約追加（5ファイル）
+- `player_validator.py`: `直近1-2年` → `{current_year-1}年1月以降`、`2024年以降` → 動的年号
+- `newcomer_detector.py`: `【時間スコープ】` セクション追加（新規参入の時間定義を明確化）
+- `player_list_generator.py`: `■時間スコープ` セクション追加（撤退済み除外・統合名称対応）
+- `store_investigator.py`: 最新店舗データ優先 + 閉店済み除外指示
+- `attribute_investigator.py`: `{current_year}年時点の最新情報` 判定ルール追加
+
+### 改修B: 店舗調査の精度向上 + 都道府県別数値（3ファイル）
+- `store_investigator.py`: ブランド展開調査手順追加、都道府県を `bool` → `int` に変更、レスポンス解析で数値保持
+- `excel_handler.py`: 都道府県数値をExcelにそのまま出力（旧 `True/False` 互換維持）
+- `store_tab.py`: ラベル「店舗・教室数」に変更、数値表示対応
+
+### コードドクター指摘修正
+- **[HIGH] bool⊂int 分岐順序バグ**: Python の `isinstance(True, int) == True` 問題。`is True`/`is False` チェックを `isinstance` の前に移動（3ファイル）
+
+### 新規テスト（3件）
+- `test_build_ai_prompt_contains_dynamic_year`: プロンプトに動的年号あり・ハードコード年号なし
+- `test_parse_ai_response_preserves_prefecture_numbers`: 数値/0/None/True/False の6パターン保持
+- `test_query_latest_info_contains_dynamic_year`: validator プロンプトの動的年号検証
+
+### 未完了・継続課題
+- [ ] 正誤チェック解析失敗の対策実装（ログ確認後）
+- [ ] Gemini API不安定対応（既存ハイブリッドモードで対応済み、大改修が必要なため別チケット化）
+- [R] `excel_handler.py` SRP違反解消
+- [E] テンプレートIDのASCIIスラッグ化
+- [E] カテゴリ値対応（boolean以外の多値分類）
+- [E] LLMClient の AsyncContextManager 化
+
+---
 
 ## セッション: 2026-03-09
 

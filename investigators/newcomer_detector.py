@@ -163,6 +163,11 @@ class NewcomerDetector:
 【既存リスト】（{len(existing_players)}件）
 {existing_text}
 
+【時間スコープ】
+- 「新規参入」= {current_year - 1}年1月以降にサービスを開始したプレイヤー
+- {current_year - 2}年以前の開始は「既存」扱い。含めないこと
+- 既にサービス終了・撤退済みのプレイヤーは除外
+
 【重要な制約】
 - 確実に存在するサービスのみ回答。推測や「ありそうな」サービスは含めない
 - 公式サイトURLが確認できない場合はofficial_urlを空文字にする

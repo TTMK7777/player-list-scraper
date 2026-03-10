@@ -154,6 +154,11 @@ class PlayerListGenerator:
         prompt = f"""{safe_industry} 業界において{current_year}年時点でサービスを提供しているプレイヤーを
 網羅的に列挙してください。
 {definition_section}{conditions_section}
+■時間スコープ
+- {current_year}年現在アクティブに運営中のサービスのみ
+- 撤退・サービス終了済みは除外
+- 過去に統合・買収された企業は現在の存続名称で記載
+
 ■重要な制約
 - 確実に存在するサービスのみ。推測や「ありそうな」サービスは不可
 - 公式サイトURLが不明ならofficial_urlを空文字に

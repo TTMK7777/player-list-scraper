@@ -5,6 +5,7 @@
 ========================
 """
 
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -248,8 +249,8 @@ class TestStoreInvestigator:
         assert result.investigation_mode == "ai"
         assert len(result.source_urls) == 2
         assert result.prefecture_distribution is not None
-        # 新仕様: 店舗有無は True/False/None で表現
-        assert result.prefecture_distribution.get("東京都") is True  # 店舗あり
+        # v7.1: 数値出力対応（int or None）
+        assert result.prefecture_distribution.get("東京都") == 25  # 店舗数
 
     @pytest.mark.asyncio
     async def test_investigate_ai_mode_low_confidence(self, mock_llm_client_low_confidence):
@@ -397,6 +398,23 @@ class TestStoreInvestigator:
         assert "2026" in prompt
         assert "JSON" in prompt
 
+    def test_build_ai_prompt_contains_dynamic_year(self, mock_llm_client_success):
+        """プロンプトに動的な現在年が含まれ、ハードコード年号がないことを検証"""
+        investigator = StoreInvestigator(llm_client=mock_llm_client_success)
+
+        current_year = datetime.now().year
+        prompt = investigator._build_ai_prompt(
+            company_name="テスト企業",
+            official_url="https://example.com",
+            industry="テスト業界",
+            current_year=current_year,
+        )
+
+        # 動的年号が含まれることを確認
+        assert str(current_year) in prompt
+        # ハードコードの "2024年以降" は除去済みなのでそれを確認
+        assert "2024年以降" not in prompt
+
     def test_parse_ai_response_valid(self, mock_llm_client_success):
         """AIレスポンス解析（正常）のテスト"""
         investigator = StoreInvestigator(llm_client=mock_llm_client_success)
@@ -440,6 +458,33 @@ class TestStoreInvestigator:
         result = investigator._parse_ai_response("テスト株式会社", response)
 
         assert result.total_stores == 150  # 数値に変換される
+
+    def test_parse_ai_response_preserves_prefecture_numbers(self, mock_llm_client_success):
+        """都道府県の数値がそのまま保持されることを検証"""
+        investigator = StoreInvestigator(llm_client=mock_llm_client_success)
+
+        response_text = json.dumps({
+            "total_stores": 100,
+            "prefecture_presence": {
+                "北海道": 5,
+                "青森県": 0,
+                "岩手県": None,
+                "宮城県": 25,
+                "秋田県": True,   # 旧形式互換
+                "山形県": False,  # 旧形式互換
+            },
+            "confidence": 0.8,
+            "source_url": "https://example.com/stores",
+            "notes": "テスト"
+        })
+        result = investigator._parse_ai_response("テスト株式会社", response_text)
+        dist = result.prefecture_distribution
+        assert dist["北海道"] == 5      # 数値がそのまま保持
+        assert dist["青森県"] == 0      # 0はそのまま保持
+        assert dist["岩手県"] is None   # nullはNone
+        assert dist["宮城県"] == 25     # 数値がそのまま保持
+        assert dist["秋田県"] == 1      # True → 1 (旧形式互換)
+        assert dist["山形県"] == 0      # False → 0 (旧形式互換)
 
     @pytest.mark.asyncio
     async def test_investigate_batch(self, mock_llm_client_success):

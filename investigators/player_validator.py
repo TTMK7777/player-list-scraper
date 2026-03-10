@@ -244,6 +244,8 @@ class PlayerValidator:
         company_context = f"（運営会社: {safe_company_name}）" if safe_company_name else ""
         url_context = f"[公式URL] {safe_url}" if safe_url else ""
 
+        current_year = datetime.now().year
+
         prompt = f"""
 「{safe_player_name}」{industry_context}{company_context}の最新情報を調査してください。
 {definition_context}
@@ -254,10 +256,11 @@ class PlayerValidator:
 2. サービス名の変更はありますか？（リブランディング等）
 3. 運営会社名の変更はありますか？
 4. 公式URLは正しいですか？（リダイレクト・変更の有無）
-5. 統合・買収などの重大ニュースはありますか？（直近1-2年）
+5. 統合・買収などの重大ニュースはありますか？（{current_year - 1}年1月以降）
 
 【重要】
-- 2024年以降の最新情報を優先してください
+- {current_year}年時点の最新情報を優先してください
+- {current_year - 2}年以前の統合・買収・社名変更は背景情報であり、change_type は現在の状態で判定してください
 - 公式サイト、プレスリリース、信頼できるニュースソースのみを参照
 - 推測や古い情報は避けてください
 

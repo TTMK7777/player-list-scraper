@@ -6,6 +6,7 @@ PlayerValidator のテスト
 
 import pytest
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -163,6 +164,30 @@ class TestPlayerValidator:
 
             assert result["status_code"] == 0
             assert result.get("error") == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_query_latest_info_contains_dynamic_year(self, mock_llm_client):
+        """検証プロンプトに動的な現在年が含まれることを検証"""
+        validator = PlayerValidator(llm_client=mock_llm_client)
+
+        current_year = datetime.now().year
+
+        await validator._query_latest_info(
+            player_name="テストサービス",
+            official_url="https://example.com/",
+            company_name="テスト株式会社",
+            industry="テスト業界",
+            definition="",
+        )
+
+        # llm.call に渡されたプロンプト文字列を取得
+        assert mock_llm_client.call.called
+        prompt = mock_llm_client.call.call_args[0][0]
+
+        # 動的年号が含まれることを確認
+        assert str(current_year) in prompt
+        # ハードコードの特定年号 "2024年時点" は存在しないことを確認
+        assert "2024年時点" not in prompt
 
 
 class TestParseResponse:

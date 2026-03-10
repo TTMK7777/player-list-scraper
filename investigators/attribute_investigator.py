@@ -247,6 +247,7 @@ class AttributeInvestigator:
             LLM用プロンプト文字列
         """
         safe_industry = sanitize_input(industry) if industry else ""
+        current_year = datetime.now().year
 
         # プレイヤー一覧
         player_lines = []
@@ -298,6 +299,7 @@ class AttributeInvestigator:
 - 各プレイヤーに対して、全属性の判定を必ず含めること
 - nullは最後の手段。公式サイトで確認できれば true/false で回答すること
 - reasoning には各属性の判定理由を1-2文で記述してください
+- {current_year}年時点の最新情報に基づいて判定してください
 
 【正しい判定の例】
 {{"player_name": "Netflix", "attributes": {{"アクション": true, "ホラー": true, "ドキュメンタリー": true}}, "confidence": 0.95, "sources": ["https://www.netflix.com/browse/genre/"], "reasoning": {{"アクション": "公式サイトのジャンル一覧に掲載あり", "ホラー": "公式サイトのジャンル一覧に掲載あり", "ドキュメンタリー": "公式サイトのジャンル一覧に掲載あり"}}}}"""

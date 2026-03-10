@@ -192,11 +192,19 @@ def _display_company_detail(result: StoreInvestigationResult) -> None:
                 st.write("- なし")
 
         if result.prefecture_distribution:
-            st.write("**都道府県別店舗数**")
+            st.write("**都道府県別店舗・教室数**")
             pref_df = pd.DataFrame([
-                {"都道府県": k, "店舗数": v}
+                {
+                    "都道府県": k,
+                    "店舗・教室数": (
+                        1 if v is True
+                        else 0 if v is False
+                        else v if isinstance(v, int)
+                        else "?"
+                    ),
+                }
                 for k, v in result.prefecture_distribution.items()
-            ]).sort_values("店舗数", ascending=False)
+            ]).sort_values("店舗・教室数", ascending=False)
             st.dataframe(pref_df, use_container_width=True, height=200)
 
         if result.notes:
