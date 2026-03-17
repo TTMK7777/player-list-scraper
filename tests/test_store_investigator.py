@@ -20,6 +20,27 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator, InvestigationMode
 
+import re as _re
+
+
+def _mock_extract_json(text):
+    """LLMClient.extract_json のテスト用簡易実装"""
+    if not text:
+        return None
+    m = _re.search(r'```json\s*([\s\S]*?)\s*```', text)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    m = _re.search(r'\{[\s\S]*?\}', text)
+    if m:
+        try:
+            return json.loads(m.group())
+        except json.JSONDecodeError:
+            pass
+    return None
+
 
 # ====================================
 # フィクスチャ
@@ -28,6 +49,7 @@ from investigators.store_investigator import StoreInvestigator, InvestigationMod
 def mock_llm_client_success():
     """成功ケース用のモックLLMクライアント"""
     mock = MagicMock()
+    mock.extract_json.side_effect = _mock_extract_json
     mock.call.return_value = '''```json
 {
     "total_stores": 150,
@@ -52,6 +74,7 @@ def mock_llm_client_success():
 def mock_llm_client_low_confidence():
     """低信頼度ケース用のモックLLMクライアント"""
     mock = MagicMock()
+    mock.extract_json.side_effect = _mock_extract_json
     mock.call.return_value = '''```json
 {
     "total_stores": 50,
@@ -67,6 +90,7 @@ def mock_llm_client_low_confidence():
 def mock_llm_client_error():
     """エラーケース用のモックLLMクライアント"""
     mock = MagicMock()
+    mock.extract_json.side_effect = _mock_extract_json
     mock.call.side_effect = RuntimeError("API呼び出しエラー")
     return mock
 
@@ -463,7 +487,7 @@ class TestStoreInvestigator:
         """都道府県の数値がそのまま保持されることを検証"""
         investigator = StoreInvestigator(llm_client=mock_llm_client_success)
 
-        response_text = json.dumps({
+        json_body = json.dumps({
             "total_stores": 100,
             "prefecture_presence": {
                 "北海道": 5,
@@ -476,7 +500,8 @@ class TestStoreInvestigator:
             "confidence": 0.8,
             "source_url": "https://example.com/stores",
             "notes": "テスト"
-        })
+        }, ensure_ascii=False)
+        response_text = f"```json\n{json_body}\n```"
         result = investigator._parse_ai_response("テスト株式会社", response_text)
         dist = result.prefecture_distribution
         assert dist["北海道"] == 5      # 数値がそのまま保持

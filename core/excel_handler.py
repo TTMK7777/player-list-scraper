@@ -22,6 +22,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from core.postal_prefecture import PREFECTURES
+
 
 @dataclass
 class PlayerData:
@@ -448,17 +450,6 @@ class StoreInvestigationExporter:
     - ソースURL（必須）
     """
 
-    # 47都道府県リスト
-    PREFECTURES = [
-        "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
-        "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
-        "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
-        "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
-        "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
-        "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
-        "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
-    ]
-
     # ステータス別の色
     STATUS_COLORS = {
         "normal": "6BCB77",        # 緑（正常）
@@ -497,7 +488,7 @@ class StoreInvestigationExporter:
         """出力列名のリストを取得"""
         columns = self.BASE_COLUMNS.copy()
         if self.include_prefectures:
-            columns.extend(self.PREFECTURES)
+            columns.extend(PREFECTURES)
         columns.extend(self.SUFFIX_COLUMNS)
         return columns
 
@@ -572,7 +563,7 @@ class StoreInvestigationExporter:
         # 注意: bool は int のサブクラスなので is True/False を先に判定
         if self.include_prefectures:
             pref_dist = result.prefecture_distribution or {}
-            for pref in self.PREFECTURES:
+            for pref in PREFECTURES:
                 value = pref_dist.get(pref)
                 if value is True:
                     row_data.append("○")        # 旧データ互換
@@ -623,7 +614,7 @@ class StoreInvestigationExporter:
                 width = 40
             elif col_name == "調査日時":
                 width = 20
-            elif col_name in self.PREFECTURES:
+            elif col_name in PREFECTURES:
                 width = 6  # 都道府県は狭めに
             else:
                 width = 15

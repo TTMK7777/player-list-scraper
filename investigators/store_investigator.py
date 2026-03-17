@@ -12,8 +12,6 @@ AI調査をメインに、スクレイピングをオプションとして併存
 """
 
 import asyncio
-import json
-import re
 import sys
 from datetime import datetime
 from enum import Enum
@@ -27,9 +25,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from investigators.base import StoreInvestigationResult
 from core.async_helpers import optimal_concurrency
 from core.sanitizer import sanitize_input
-from core.safe_parse import safe_float
 from core.llm_client import DEFAULT_MODEL
 from core.llm_schemas import StoreInvestigationLLMResponse, parse_llm_response
+from core.postal_prefecture import PREFECTURES
 
 
 class InvestigationMode(Enum):
@@ -88,16 +86,6 @@ class StoreInvestigator:
             "estimated_cost": company_count * cost_per_call,
             "mode": mode,
         }
-
-    # 入力サニタイズ用の危険パターン
-    DANGEROUS_PATTERNS = [
-        r"ignore.*instructions?",
-        r"forget.*instructions?",
-        r"system.*prompt",
-        r"<\|.*\|>",
-        r"\{\{.*\}\}",
-        r"```.*system",
-    ]
 
     def __init__(
         self,
@@ -238,17 +226,6 @@ class StoreInvestigator:
                 error_message=str(e)
             )
 
-    # 47都道府県リスト（プロンプト用）
-    PREFECTURES = [
-        "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
-        "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
-        "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
-        "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
-        "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
-        "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
-        "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
-    ]
-
     def _build_ai_prompt(
         self,
         company_name: str,
@@ -261,7 +238,7 @@ class StoreInvestigator:
         industry_hint = f"\n【業界】{industry}" if industry else ""
 
         # 都道府県リストをJSON形式で生成
-        pref_template = ", ".join([f'"{p}": 数値/0/null' for p in self.PREFECTURES[:5]])
+        pref_template = ", ".join([f'"{p}": 数値/0/null' for p in PREFECTURES[:5]])
 
         return f"""
 「{company_name}」の店舗・教室・拠点の展開状況を調査してください。
@@ -310,7 +287,7 @@ class StoreInvestigator:
 **重要**:
 - prefecture_presence は各都道府県の概算店舗・教室数を整数（0以上）または null で回答
 - store_list_url は店舗一覧/店舗検索ページのURLを必ず記載（見つからない場合は null）
-- 全47都道府県について回答: {', '.join(self.PREFECTURES)}
+- 全47都道府県について回答: {', '.join(PREFECTURES)}
 """
 
     def _parse_ai_response(
@@ -319,29 +296,26 @@ class StoreInvestigator:
         response: str,
     ) -> StoreInvestigationResult:
         """AIレスポンスを解析（pydantic スキーマでバリデーション）"""
-        # JSONを抽出
-        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', response)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            json_match = re.search(r'\{[\s\S]*\}', response)
-            if json_match:
-                json_str = json_match.group()
-            else:
-                return StoreInvestigationResult.create_uncertain(
-                    company_name=company_name,
-                    investigation_mode="ai",
-                    reason="JSONを抽出できませんでした",
-                    raw_response=response,
-                )
+        llm = self._get_llm_client()
 
         try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError as e:
+            data = llm.extract_json(response)
+        except Exception:
+            data = None
+
+        if data is None:
             return StoreInvestigationResult.create_uncertain(
                 company_name=company_name,
                 investigation_mode="ai",
-                reason=f"JSON解析エラー: {e}",
+                reason="JSONを抽出できませんでした",
+                raw_response=response,
+            )
+
+        if not isinstance(data, dict):
+            return StoreInvestigationResult.create_uncertain(
+                company_name=company_name,
+                investigation_mode="ai",
+                reason="JSON解析結果がオブジェクトではありません",
                 raw_response=response,
             )
 
@@ -363,7 +337,7 @@ class StoreInvestigator:
         prefecture_distribution = None
         if isinstance(prefecture_presence, dict):
             prefecture_distribution = {}
-            for pref in self.PREFECTURES:
+            for pref in PREFECTURES:
                 value = prefecture_presence.get(pref)
                 if value is True:
                     prefecture_distribution[pref] = 1  # 旧形式互換
