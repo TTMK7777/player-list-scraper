@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core.logger import setup_logging
 from core.llm_client import is_api_available, DEFAULT_MODEL
+from core.perplexity_client import is_perplexity_available
 
 # ロギング設定（モジュール読み込み時に1度だけ実行）
 setup_logging()
@@ -145,6 +146,13 @@ def init_apis() -> bool:
     except Exception:
         pass  # ローカル環境では st.secrets が存在しないため無視
 
+    # Perplexity APIキーも同様に st.secrets から読み込み（Streamlit Cloud対応）
+    try:
+        if "PERPLEXITY_API_KEY" in st.secrets:
+            os.environ["PERPLEXITY_API_KEY"] = st.secrets["PERPLEXITY_API_KEY"]
+    except Exception:
+        pass
+
     return is_api_available()
 
 
@@ -209,6 +217,12 @@ def main():
             st.error("❌ GOOGLE_API_KEY が設定されていません")
             st.info("~/.env.local またはStreamlit Cloud の Secrets に GOOGLE_API_KEY を設定してください")
             st.stop()
+
+        # Perplexity 補助検索エンジンの状態表示
+        if is_perplexity_available():
+            st.success("✅ Perplexity: 接続OK（補助検索）")
+        else:
+            st.info("💡 Perplexity: 未設定（補助検索なしで動作します）")
 
         st.divider()
 

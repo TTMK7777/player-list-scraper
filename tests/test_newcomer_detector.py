@@ -320,7 +320,10 @@ class TestDetectIntegration:
         def on_progress(current, total, name):
             progress_calls.append((current, total, name))
 
-        detector = NewcomerDetector(llm_client=mock_llm_newcomer_success)
+        detector = NewcomerDetector(
+            llm_client=mock_llm_newcomer_success,
+            perplexity_client=None,  # Perplexity無効で3ステップ固定
+        )
 
         with patch.object(detector, "_verify_url") as mock_verify:
             mock_verify.return_value = {"status_code": 200}
@@ -330,4 +333,4 @@ class TestDetectIntegration:
                 on_progress=on_progress,
             )
 
-        assert len(progress_calls) == 3  # 3ステップ
+        assert len(progress_calls) == 3  # 3ステップ（Perplexityなし）

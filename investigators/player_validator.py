@@ -51,7 +51,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.async_helpers import optimal_concurrency
 from core.llm_client import LLMClient, get_default_client, DEFAULT_MODEL
+from core.perplexity_client import get_perplexity_client
 from core.excel_handler import PlayerData
+
+# センチネル値: "引数が渡されなかった"と"明示的にNoneが渡された"を区別
+_UNSET = object()
 from core.sanitizer import sanitize_input, verify_url
 from core.safe_parse import safe_float
 from core.llm_schemas import PlayerValidationLLMResponse, parse_llm_response
@@ -95,14 +99,21 @@ class PlayerValidator:
         self,
         llm_client: Optional[LLMClient] = None,
         model: str = DEFAULT_MODEL,
+        perplexity_client=_UNSET,
     ):
         """
         Args:
             llm_client: LLMクライアント（未指定時はデフォルトを使用）
             model: 使用するモデル
+            perplexity_client: Perplexityクライアント（未指定時は自動取得、None で明示無効化）
         """
         self.llm = llm_client or get_default_client()
         self.model = model
+        # _UNSET: 自動取得、None: 明示無効、その他: 指定されたクライアント
+        if perplexity_client is _UNSET:
+            self._perplexity = get_perplexity_client()
+        else:
+            self._perplexity = perplexity_client
 
     async def validate_player(
         self,
@@ -140,6 +151,11 @@ class PlayerValidator:
                 official_url,
                 company_name,
                 url_status,
+            )
+
+            # Step 4: Perplexity 補助検証（要確認 or 低信頼度の場合のみ）
+            result = await self._supplement_with_perplexity(
+                result, player_name, industry, company_name
             )
 
             return result
@@ -403,6 +419,63 @@ class PlayerValidator:
             needs_manual_review=ValidationResult.should_need_manual_review(status, confidence),
             raw_response=response,
         )
+
+
+    async def _supplement_with_perplexity(
+        self,
+        result: ValidationResult,
+        player_name: str,
+        industry: Optional[str],
+        company_name: str,
+    ) -> ValidationResult:
+        """Perplexity で補助検証（要確認・低信頼度の場合のみ）
+
+        Gemini の結果が UNCERTAIN の場合に Perplexity に問い合わせ、
+        追加情報を change_details に付記する。
+        結果のステータスは変更しない（人間の判断を尊重するため）。
+
+        Args:
+            result: Gemini による検証結果
+            player_name: プレイヤー名
+            industry: 業界名
+            company_name: 運営会社名
+
+        Returns:
+            補助情報が付記された ValidationResult（変更なしの場合はそのまま返す）
+        """
+        # Perplexity が利用不可、または結果が確定済みの場合はスキップ
+        if self._perplexity is None:
+            return result
+
+        if result.status not in (ValidationStatus.UNCERTAIN, ValidationStatus.ERROR):
+            return result
+
+        try:
+            logger.info("[%s] Perplexity 補助検証を実行中...", player_name)
+
+            perplexity_response = await asyncio.to_thread(
+                lambda: self._perplexity.verify_player_status(
+                    player_name=player_name,
+                    industry=industry or "",
+                    company_name=company_name,
+                )
+            )
+
+            if perplexity_response:
+                # 補助情報を change_details に追記
+                result.change_details.append(
+                    f"[Perplexity補助検証] {perplexity_response[:500]}"
+                )
+                logger.info("[%s] Perplexity 補助検証完了", player_name)
+            else:
+                logger.info("[%s] Perplexity 補助検証: 結果なし", player_name)
+
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            logger.warning("[%s] Perplexity 補助検証エラー（無視して続行）: %s", player_name, e)
+
+        return result
 
 
 # =============================================================================

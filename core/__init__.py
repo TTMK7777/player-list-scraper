@@ -8,6 +8,7 @@
 from .async_helpers import run_async
 from .excel_handler import ExcelHandler, PlayerData, AttributeInvestigationExporter
 from .llm_client import LLMClient
+from .perplexity_client import PerplexityClient, is_perplexity_available, get_perplexity_client
 from .safe_parse import safe_float, safe_int
 from .sanitizer import sanitize_input, sanitize_url, verify_url
 from .attribute_presets import ATTRIBUTE_PRESETS, get_preset, get_preset_labels
@@ -21,6 +22,9 @@ __all__ = [
     "PlayerData",
     "AttributeInvestigationExporter",
     "LLMClient",
+    "PerplexityClient",
+    "is_perplexity_available",
+    "get_perplexity_client",
     "safe_float",
     "safe_int",
     "sanitize_input",

@@ -36,7 +36,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from investigators.base import NewcomerCandidate
 from core.sanitizer import sanitize_input, sanitize_url, verify_url
 from core.llm_client import DEFAULT_MODEL
+from core.perplexity_client import get_perplexity_client
 from core.llm_schemas import NewcomerCandidateLLMResponse, parse_llm_response
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+# センチネル値: "引数が渡されなかった"と"明示的にNoneが渡された"を区別
+_UNSET = object()
 
 
 class NewcomerDetector:
@@ -71,14 +79,21 @@ class NewcomerDetector:
         self,
         llm_client=None,
         model: str = DEFAULT_MODEL,
+        perplexity_client=_UNSET,
     ):
         """
         Args:
             llm_client: LLMクライアント（未指定時は自動作成）
             model: 使用するLLMモデル
+            perplexity_client: Perplexityクライアント（未指定時は自動取得、None で明示無効化）
         """
         self.llm = llm_client
         self.model = model
+        # _UNSET: 自動取得、None: 明示無効、その他: 指定されたクライアント
+        if perplexity_client is _UNSET:
+            self._perplexity = get_perplexity_client()
+        else:
+            self._perplexity = perplexity_client
 
     def _get_llm_client(self):
         """LLMクライアントを取得（遅延初期化）"""
@@ -105,14 +120,27 @@ class NewcomerDetector:
         Returns:
             NewcomerCandidate のリスト（URL検証済み）
         """
+        # ステップ数はPerplexity有無で変化
+        has_perplexity = self._perplexity is not None
+        total_steps = 4 if has_perplexity else 3
+
         if on_progress:
-            on_progress(1, 3, "LLMに問い合わせ中...")
+            on_progress(1, total_steps, "LLMに問い合わせ中...")
 
         # Step 1: LLMに問い合わせ
         candidates = await self._query_newcomers(industry, existing_players, definition=definition)
 
+        # Step 2 (optional): Perplexity クロスバリデーション
+        if has_perplexity and candidates:
+            if on_progress:
+                on_progress(2, total_steps, "Perplexity でクロスバリデーション中...")
+            candidates = await self._cross_validate_with_perplexity(
+                candidates, industry, existing_players
+            )
+
+        url_step = 3 if has_perplexity else 2
         if on_progress:
-            on_progress(2, 3, f"URL検証中（{len(candidates)}件）...")
+            on_progress(url_step, total_steps, f"URL検証中（{len(candidates)}件）...")
 
         # Step 2: URL自動検証（全候補を並列実行）
         urls_to_verify = [(i, c) for i, c in enumerate(candidates) if c.official_url]
@@ -134,8 +162,9 @@ class NewcomerDetector:
             if not candidate.official_url:
                 candidate.verification_status = "unverified"
 
+        done_step = 4 if has_perplexity else 3
         if on_progress:
-            on_progress(3, 3, "検出完了")
+            on_progress(done_step, total_steps, "検出完了")
 
         return candidates
 
@@ -251,3 +280,60 @@ class NewcomerDetector:
         後方互換性のためメソッドとして残す。
         """
         return await verify_url(url)
+
+    async def _cross_validate_with_perplexity(
+        self,
+        candidates: list[NewcomerCandidate],
+        industry: str,
+        existing_players: list[str],
+    ) -> list[NewcomerCandidate]:
+        """Perplexity でクロスバリデーション
+
+        Gemini が提案した候補を Perplexity でも検索し、
+        Perplexity でも言及された候補の reason に補足情報を追記する。
+        Perplexity のみで見つかった新規候補は追加しない
+        （Gemini をメインとし、Perplexity は確認用のみ）。
+
+        Args:
+            candidates: Gemini 由来の新規参入候補リスト
+            industry: 業界名
+            existing_players: 既存プレイヤー名リスト
+
+        Returns:
+            クロスバリデーション情報が付記された候補リスト
+        """
+        if not self._perplexity:
+            return candidates
+
+        try:
+            logger.info("Perplexity クロスバリデーション開始（%d候補）", len(candidates))
+
+            perplexity_response = await asyncio.to_thread(
+                lambda: self._perplexity.search_newcomers(
+                    industry=industry,
+                    existing_players=existing_players,
+                )
+            )
+
+            if not perplexity_response:
+                logger.info("Perplexity クロスバリデーション: 結果なし")
+                return candidates
+
+            # 各候補について Perplexity の応答に名前が含まれるかチェック
+            response_lower = perplexity_response.lower()
+            for candidate in candidates:
+                name_lower = candidate.player_name.lower()
+                if name_lower in response_lower:
+                    candidate.reason = (
+                        f"{candidate.reason} "
+                        f"[Perplexity でも確認済み]"
+                    ).strip()
+
+            logger.info("Perplexity クロスバリデーション完了")
+
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            logger.warning("Perplexity クロスバリデーションエラー（無視して続行）: %s", e)
+
+        return candidates

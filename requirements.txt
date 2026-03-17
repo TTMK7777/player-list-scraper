@@ -29,3 +29,6 @@ openpyxl==3.1.5
 
 # LLMレスポンスバリデーション
 pydantic==2.12.5
+
+# Perplexity API（補助検索エンジン、OpenAI互換）
+openai>=1.0.0
