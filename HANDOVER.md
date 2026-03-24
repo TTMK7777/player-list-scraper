@@ -1,8 +1,63 @@
 # プレイヤーリスト調査システム - Handover Document
 
-> **最終更新**: 2026-03-10
+> **最終更新**: 2026-03-24
 > **担当**: Claude Opus 4.6 + たいむさん
-> **バージョン**: v7.1
+> **バージョン**: v7.2
+
+## セッション: 2026-03-24
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | v7.2: 現場FB対応第2弾 — 安全性・合法性フレームワーク + 期間制約強化 + 2段階ブランド発見 |
+| **変更ファイル** | 10ファイル変更 + 8ファイル新規（+364行） |
+| **テスト** | 522件全パス（492既存 + 30新規、回帰なし） |
+| **品質ゲート** | 取締役会（プラン審査）→ センチネル自律処理 → コードドクター（3件修正） |
+| **実行方式** | センチネル Pikmin Swarm: 4ピクミン（Opus×3 + Sonnet×1）、2 Wave並列 |
+| **ステータス** | 完了（未コミット） |
+
+### 背景: 現場FB 7件
+v7.1で対応済み4件（テンプレート編集、判定理由表示、都道府県別数値、SAMANSAバグ）をスルーし、残存3課題を実装。最優先は安全性・合法性。
+
+### TASK 1: 安全性・合法性フレームワーク（最優先）
+**新規ファイル（5件）:**
+- `core/robots_checker.py`: robots.txt自動準拠チェッカー（ドメインキャッシュ1h TTL、async対応）
+- `core/constants.py`: `__version__='7.2'` + `TOOL_USER_AGENT` / `BROWSER_USER_AGENT` 一元管理
+- `core/rate_limiter.py`: ドメイン別レート制限（最小0.5秒間隔、asyncio.Lock）
+- `core/request_audit.py`: HTTPリクエスト監査ログ（JSONL形式、30日ローテーション）
+- `docs/scraping_policy.md`: スクレイピングポリシー文書
+
+**統合（3ファイル変更）:**
+- `store_scraper_v3.py`: robots_checker + rate_limiter + audit_log + UA統合（`_fetch_page()` + BrowserAutomation）
+- `core/sanitizer.py`: `verify_url()` の UA変更 + 監査ログ追加
+- `ui/store_tab.py`: スクレイピング同意チェックボックス追加
+
+### TASK 2: 最新動向の期間制約強化
+- `investigators/player_validator.py`: 確認事項1-4に `{current_year-1}年1月以降` を明示追加、古いイベント→`change_type="none"` を強化、否定例追加
+
+### TASK 3: 店舗調査2段階ブランド発見
+- `investigators/store_investigator.py`: `_discover_brands()` 新メソッド（企業名→ブランド特定）、0件時のみ自動リトライ（1回限り保証）
+- `core/llm_schemas.py`: `BrandDiscoveryLLMResponse` Pydanticモデル追加
+- `_build_ai_prompt()` に `brands` パラメータ追加
+
+### コードドクター指摘修正（3件）
+1. **[HIGH]** `store_investigator.py`: `_discover_brands()` の `except Exception: pass` → `logging.warning` 追加
+2. **[MEDIUM]** `store_scraper_v3.py`: `_check_sync()` プライベートメソッド呼出 → `await is_allowed()` に変更
+3. **[MEDIUM]** `store_investigator.py`: `brands: list[str] = None` → `Optional[list[str]] = None`
+
+### 新規テスト（30件）
+- `test_robots_checker.py` (8件): robots.txtパース、キャッシュ、タイムアウト、404
+- `test_rate_limiter.py` (8件): ドメイン別制限、並行アクセス
+- `test_request_audit.py` (8件): JSONL形式、フィールド検証
+- `test_player_validator.py` (+2件): プロンプト日付制約、古いイベント非報告
+- `test_store_investigator.py` (+4件): ブランド発見、0件リトライ、プロンプト検証
+
+### 未完了・継続課題
+- [ ] 正誤チェック解析失敗の対策実装（前回からの引き継ぎ）
+- [ ] Gemini API不安定対応（既存ハイブリッドモードで対応済み、大改修は別チケット）
+- [ ] コミット＆プッシュ（本セッション内で実施予定）
+
+---
 
 ## セッション: 2026-03-10
 

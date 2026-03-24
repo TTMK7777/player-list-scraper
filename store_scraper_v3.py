@@ -33,7 +33,11 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
+from core.constants import BROWSER_USER_AGENT
 from core.llm_client import LLMClient, DEFAULT_MODEL
+from core.rate_limiter import DomainRateLimiter
+from core.request_audit import log_request as audit_log_request
+from core.robots_checker import RobotsChecker, RobotsDisallowedError
 
 from core.postal_prefecture import POSTAL_PREFIX_MAP, extract_prefecture_from_postal
 
@@ -96,10 +100,14 @@ MAX_HTML_LENGTH = 50000        # HTML最大長
 # 共通ユーティリティ
 # ====================================
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": BROWSER_USER_AGENT,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
 }
+
+# 安全性モジュール（モジュールレベルのシングルトン）
+_robots_checker = RobotsChecker()
+_rate_limiter = DomainRateLimiter()
 
 # 都道府県リスト
 PREFECTURES = [
@@ -451,9 +459,17 @@ class StaticHTMLStrategy(ScrapingStrategy):
 
     async def _fetch_page(self, url: str) -> tuple[str, BeautifulSoup]:
         """ページを取得"""
+        # robots.txt チェック
+        if not await _robots_checker.is_allowed(url, HEADERS["User-Agent"]):
+            raise RobotsDisallowedError(url, urlparse(url).netloc)
+        # レートリミット
+        await _rate_limiter.wait(url)
+        start = time.time()
         response = await asyncio.to_thread(
             requests.get, url, headers=HEADERS, timeout=REQUEST_TIMEOUT
         )
+        elapsed_ms = (time.time() - start) * 1000
+        audit_log_request(url, "GET", response.status_code, elapsed_ms, HEADERS["User-Agent"])
         response.raise_for_status()
         self._count_page_visit()
         response.encoding = response.apparent_encoding
@@ -952,6 +968,10 @@ class BrowserAutomationStrategy(ScrapingStrategy):
             try:
                 # Step 1: トップページにアクセス
                 log(f"ページを読み込み中: {url}")
+                # robots.txt チェック
+                if not await _robots_checker.is_allowed(url, HEADERS["User-Agent"]):
+                    raise RobotsDisallowedError(url, urlparse(url).netloc)
+                await _rate_limiter.wait(url)
                 await page.goto(url, timeout=PLAYWRIGHT_TIMEOUT_MS, wait_until="networkidle")
                 self._count_page_visit()
                 await asyncio.sleep(2)
@@ -977,6 +997,10 @@ class BrowserAutomationStrategy(ScrapingStrategy):
                         log(f"巡回中: {link[:60]}...")
 
                         if link != url:
+                            if not await _robots_checker.is_allowed(link, HEADERS["User-Agent"]):
+                                log(f"robots.txt により拒否: {link[:60]}")
+                                continue
+                            await _rate_limiter.wait(link)
                             await page.goto(link, timeout=PLAYWRIGHT_TIMEOUT_MS, wait_until="networkidle")
                             self._count_page_visit()
                             await asyncio.sleep(1)
@@ -992,6 +1016,10 @@ class BrowserAutomationStrategy(ScrapingStrategy):
                                 visited.add(pref_link)
 
                                 try:
+                                    if not await _robots_checker.is_allowed(pref_link, HEADERS["User-Agent"]):
+                                        log(f"robots.txt により拒否: {pref_link[:60]}")
+                                        continue
+                                    await _rate_limiter.wait(pref_link)
                                     await page.goto(pref_link, timeout=PLAYWRIGHT_TIMEOUT_MS, wait_until="networkidle")
                                     self._count_page_visit()
                                     await asyncio.sleep(CRAWL_SLEEP_INTERVAL)

@@ -259,8 +259,14 @@ def render_store_tab():
         investigation_mode = InvestigationMode.HYBRID
 
     # スクレイピング注意事項
+    scraping_consent = True  # AI調査モードではデフォルト同意
     if investigation_mode in (InvestigationMode.SCRAPING, InvestigationMode.HYBRID):
         _display_scraping_warning()
+        scraping_consent = st.checkbox(
+            "対象サイトの利用規約とrobots.txtを確認しました",
+            value=False,
+            key="store_scraping_consent",
+        )
 
     st.divider()
 
@@ -366,7 +372,7 @@ def render_store_tab():
         run_button = st.button(
             "🚀 店舗調査開始",
             type="primary",
-            disabled=not st.session_state.store_companies or st.session_state.store_is_running,
+            disabled=not st.session_state.store_companies or st.session_state.store_is_running or not scraping_consent,
             use_container_width=True,
             key="store_run_button",
         )

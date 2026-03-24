@@ -9,9 +9,13 @@ player_validator.py / store_investigator.py / 新機能で共通使用。
 
 import asyncio
 import re
+import time
 from urllib.parse import urlparse
 
 import requests
+
+from core.constants import TOOL_USER_AGENT
+from core.request_audit import log_request as audit_log_request
 
 
 # プロンプトインジェクション検出パターン
@@ -174,15 +178,18 @@ async def verify_url(url: str) -> dict:
         return {"status_code": 0, "error": "empty_url"}
 
     try:
+        start = time.time()
         response = await asyncio.to_thread(
             requests.head,
             url,
             timeout=10,
             allow_redirects=True,
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                "User-Agent": TOOL_USER_AGENT,
             },
         )
+        elapsed_ms = (time.time() - start) * 1000
+        audit_log_request(url, "HEAD", response.status_code, elapsed_ms, TOOL_USER_AGENT)
         return {
             "status_code": response.status_code,
             "final_url": str(response.url),

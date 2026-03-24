@@ -12,6 +12,7 @@ AI調査をメインに、スクレイピングをオプションとして併存
 """
 
 import asyncio
+import logging
 import sys
 from datetime import datetime
 from enum import Enum
@@ -26,7 +27,11 @@ from investigators.base import StoreInvestigationResult
 from core.async_helpers import optimal_concurrency
 from core.sanitizer import sanitize_input
 from core.llm_client import DEFAULT_MODEL
-from core.llm_schemas import StoreInvestigationLLMResponse, parse_llm_response
+from core.llm_schemas import (
+    BrandDiscoveryLLMResponse,
+    StoreInvestigationLLMResponse,
+    parse_llm_response,
+)
 from core.postal_prefecture import PREFECTURES
 
 
@@ -196,11 +201,12 @@ class StoreInvestigator:
         industry: Optional[str],
         log: Callable[[str], None],
     ) -> StoreInvestigationResult:
-        """AI（LLM）による店舗調査"""
+        """AI（LLM）による店舗調査（2段階ブランド発見対応）"""
         log("AI調査を実行中...")
 
         llm = self._get_llm_client()
         current_year = datetime.now().year
+        _already_retried_with_brands = False
 
         # プロンプト生成
         prompt = self._build_ai_prompt(company_name, official_url, industry, current_year)
@@ -216,6 +222,33 @@ class StoreInvestigator:
             result = self._parse_ai_response(company_name, response)
             log(f"調査完了: {result.total_stores}店舗")
 
+            # 2段階ブランド発見: 0件 + 要確認の場合、ブランド特定→再調査
+            if (
+                result.total_stores == 0
+                and result.needs_verification
+                and not _already_retried_with_brands
+            ):
+                _already_retried_with_brands = True
+                log("0件のためブランド発見フェーズを実行...")
+
+                brand_list = await self._discover_brands(company_name, industry)
+
+                if brand_list:
+                    log(f"ブランド発見: {brand_list} → 再調査実行...")
+                    prompt_retry = self._build_ai_prompt(
+                        company_name, official_url, industry, current_year,
+                        brands=brand_list,
+                    )
+                    response_retry = await asyncio.to_thread(
+                        lambda: llm.call(
+                            prompt_retry, model=self.model,
+                            use_search=True, temperature=0.1,
+                        )
+                    )
+                    log("再調査レスポンスを解析中...")
+                    result = self._parse_ai_response(company_name, response_retry)
+                    log(f"再調査完了: {result.total_stores}店舗")
+
             return result
 
         except Exception as e:
@@ -226,16 +259,69 @@ class StoreInvestigator:
                 error_message=str(e)
             )
 
+    async def _discover_brands(
+        self, company_name: str, industry: Optional[str] = None
+    ) -> list[str]:
+        """企業名から関連ブランド・サービス名を特定する専用LLMコール"""
+        industry_hint = f"（業界: {industry}）" if industry else ""
+        prompt = f"""
+「{company_name}」{industry_hint}が運営する全てのブランド・サービス名・教室名・店舗ブランド名を列挙してください。
+
+【重要】
+- 企業名とブランド名が異なる場合がある（例: 企業「Z会」→「Z会教室」「Z会進学教室」）
+- 複数のサービスブランドを展開している場合は全て列挙
+- 既に終了したブランドは除外
+
+【出力形式】JSON
+```json
+{{
+    "brands": [
+        {{"name": "ブランド名1", "type": "店舗/教室/サービス"}},
+        {{"name": "ブランド名2", "type": "店舗/教室/サービス"}}
+    ],
+    "parent_company": "{company_name}",
+    "notes": "補足（任意）"
+}}
+```
+"""
+        llm = self._get_llm_client()
+        response = await asyncio.to_thread(
+            lambda: llm.call(prompt, model=self.model, use_search=True, temperature=0.1)
+        )
+
+        try:
+            data = llm.extract_json(response)
+            if data and isinstance(data, dict):
+                parsed = BrandDiscoveryLLMResponse(**data)
+                return [b["name"] for b in parsed.brands if isinstance(b, dict) and "name" in b]
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "ブランド発見パース失敗 (%s): %s", company_name, e
+            )
+
+        return []
+
     def _build_ai_prompt(
         self,
         company_name: str,
         official_url: str,
         industry: Optional[str],
         current_year: int,
+        brands: Optional[list[str]] = None,
     ) -> str:
         """AI調査用プロンプトを生成（v5.1 精度向上版）"""
         url_hint = f"\n【公式サイト】{official_url}" if official_url else ""
         industry_hint = f"\n【業界】{industry}" if industry else ""
+
+        # ブランドリストが指定されている場合のヒント
+        brands_hint = ""
+        if brands:
+            brand_lines = "\n".join(f"- {b}" for b in brands)
+            brands_hint = f"""
+【関連ブランド・サービス名】
+以下のブランドそれぞれで「○○ 店舗一覧」「○○ 教室一覧」を検索してください:
+{brand_lines}
+"""
 
         # 都道府県リストをJSON形式で生成
         pref_template = ", ".join([f'"{p}": 数値/0/null' for p in PREFECTURES[:5]])
@@ -250,7 +336,7 @@ class StoreInvestigator:
 2. 企業名+ブランド名それぞれで「○○ 店舗一覧」「○○ 教室一覧」を検索
 3. 公式サイトの店舗/教室一覧ページを特定（URLを記録）
 4. 各都道府県の概算店舗・教室数を確認
-
+{brands_hint}
 【ブランド展開の注意】
 - 企業名とサービスブランド名が異なる場合がある
 - 複数ブランド展開時は全ブランドの合計をカウント

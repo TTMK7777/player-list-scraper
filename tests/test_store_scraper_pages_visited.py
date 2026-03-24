@@ -31,6 +31,18 @@ from store_scraper_v3 import (
 # ====================================
 # フィクスチャ
 # ====================================
+@pytest.fixture(autouse=True)
+def _bypass_safety_modules():
+    """robots_checker / rate_limiter / audit_log をバイパス（全テスト共通）"""
+    mock_rl = MagicMock()
+    mock_rl.wait = AsyncMock()
+    with patch("store_scraper_v3._robots_checker") as mock_rc, \
+         patch("store_scraper_v3.audit_log_request"), \
+         patch("store_scraper_v3._rate_limiter", mock_rl):
+        mock_rc.is_allowed = AsyncMock(return_value=True)
+        yield
+
+
 @pytest.fixture
 def mock_llm():
     """モックLLMクライアント"""

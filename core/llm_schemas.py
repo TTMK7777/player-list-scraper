@@ -184,6 +184,26 @@ class NewcomerCandidateLLMResponse(BaseModel):
 
 
 # ====================================
+# BrandDiscovery 用スキーマ
+# ====================================
+class BrandDiscoveryLLMResponse(BaseModel):
+    """ブランド発見LLMレスポンス"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    brands: list[dict] = []  # [{"name": "Z会教室", "type": "classroom"}, ...]
+    parent_company: str = ""
+    notes: str = ""
+
+    @field_validator("brands", mode="before")
+    @classmethod
+    def validate_brands(cls, v):
+        if not isinstance(v, list):
+            return []
+        return v
+
+
+# ====================================
 # ユーティリティ
 # ====================================
 def parse_llm_response(raw: dict, schema: type[T]) -> Optional[T]:

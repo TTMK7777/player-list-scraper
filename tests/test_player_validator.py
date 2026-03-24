@@ -189,6 +189,55 @@ class TestPlayerValidator:
         # ハードコードの特定年号 "2024年時点" は存在しないことを確認
         assert "2024年時点" not in prompt
 
+    @pytest.mark.asyncio
+    async def test_prompt_contains_date_constraints(self, mock_llm_client):
+        """確認事項1-4に明示的な日付範囲が含まれることを検証"""
+        validator = PlayerValidator(llm_client=mock_llm_client)
+
+        current_year = datetime.now().year
+        expected_date = f"{current_year - 1}年1月以降"
+
+        await validator._query_latest_info(
+            player_name="テストサービス",
+            official_url="https://example.com/",
+            company_name="テスト株式会社",
+            industry="テスト業界",
+            definition="",
+        )
+
+        assert mock_llm_client.call.called
+        prompt = mock_llm_client.call.call_args[0][0]
+
+        # 確認事項1-4の全てに日付範囲が含まれることを確認
+        assert f"撤退・終了していないか）" in prompt and expected_date in prompt
+        assert f"リブランディング等）" in prompt and expected_date in prompt
+        assert f"の変更のみ）" in prompt and expected_date in prompt
+        assert f"リダイレクト・変更の有無）" in prompt and expected_date in prompt
+
+    @pytest.mark.asyncio
+    async def test_old_event_not_reported_in_prompt(self, mock_llm_client):
+        """古いイベントを報告しない旨がプロンプトに含まれることを検証"""
+        validator = PlayerValidator(llm_client=mock_llm_client)
+
+        current_year = datetime.now().year
+
+        await validator._query_latest_info(
+            player_name="テストサービス",
+            official_url="https://example.com/",
+            company_name="テスト株式会社",
+            industry="テスト業界",
+            definition="",
+        )
+
+        assert mock_llm_client.call.called
+        prompt = mock_llm_client.call.call_args[0][0]
+
+        # {current_year - 2}年以前...change_type は "none" の旨が含まれることを確認
+        assert f'{current_year - 2}年以前' in prompt
+        assert 'change_type は "none"' in prompt
+        # news フィールドの期間制約が含まれることを確認
+        assert "news フィールドには直近1年以内" in prompt
+
 
 class TestParseResponse:
     """_parse_response メソッドのテスト"""

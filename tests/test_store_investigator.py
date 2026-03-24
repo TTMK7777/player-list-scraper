@@ -541,6 +541,133 @@ class TestStoreInvestigator:
 
 
 # ====================================
+# 2段階ブランド発見テスト
+# ====================================
+class TestBrandDiscovery:
+    """2段階ブランド発見のテスト"""
+
+    @pytest.mark.asyncio
+    async def test_brand_discovery_returns_brands(self):
+        """_discover_brands がブランドリストを返すことを検証"""
+        mock_llm = MagicMock()
+        mock_llm.extract_json.side_effect = _mock_extract_json
+        mock_llm.call.return_value = '''```json
+{
+    "brands": [
+        {"name": "Z会教室", "type": "教室"},
+        {"name": "Z会進学教室", "type": "教室"}
+    ],
+    "parent_company": "Z会",
+    "notes": ""
+}
+```'''
+
+        investigator = StoreInvestigator(llm_client=mock_llm)
+        brands = await investigator._discover_brands("Z会", "学習塾")
+
+        assert brands == ["Z会教室", "Z会進学教室"]
+        mock_llm.call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_zero_stores_triggers_two_phase(self):
+        """0件+要確認の場合に2段階調査が実行されることを検証"""
+        # 初回: 0件を返す → 2回目: ブランド付きで50件を返す
+        call_count = {"n": 0}
+
+        def mock_call(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # ブランド発見コール
+                # _investigate_ai の初回LLMコール → 0件
+                return '''```json
+{
+    "total_stores": 0,
+    "confidence": 0.3,
+    "sources": [],
+    "notes": "情報不足"
+}
+```'''
+            elif call_count["n"] == 2:
+                # _discover_brands のLLMコール
+                return '''```json
+{
+    "brands": [{"name": "Z会教室", "type": "教室"}],
+    "parent_company": "Z会",
+    "notes": ""
+}
+```'''
+            else:
+                # 再調査のLLMコール → 50件
+                return '''```json
+{
+    "total_stores": 50,
+    "confidence": 0.8,
+    "sources": ["https://www.zkai.co.jp/classroom/"],
+    "notes": "再調査で発見"
+}
+```'''
+
+        mock_llm = MagicMock()
+        mock_llm.extract_json.side_effect = _mock_extract_json
+        mock_llm.call.side_effect = mock_call
+
+        investigator = StoreInvestigator(llm_client=mock_llm)
+        result = await investigator.investigate(
+            company_name="Z会",
+            official_url="https://www.zkai.co.jp/",
+            industry="学習塾",
+            mode=InvestigationMode.AI,
+        )
+
+        # LLM呼び出しが3回（初回調査 + ブランド発見 + 再調査）
+        assert mock_llm.call.call_count == 3
+        assert result.total_stores == 50
+
+    @pytest.mark.asyncio
+    async def test_nonzero_stores_skips_two_phase(self):
+        """0件でない場合は2段階調査がスキップされることを検証"""
+        mock_llm = MagicMock()
+        mock_llm.extract_json.side_effect = _mock_extract_json
+        mock_llm.call.return_value = '''```json
+{
+    "total_stores": 50,
+    "confidence": 0.85,
+    "sources": ["https://example.com/stores/"],
+    "notes": ""
+}
+```'''
+
+        investigator = StoreInvestigator(llm_client=mock_llm)
+        result = await investigator.investigate(
+            company_name="テスト株式会社",
+            official_url="https://example.com/",
+            industry="飲食店",
+            mode=InvestigationMode.AI,
+        )
+
+        # LLM呼び出しは1回のみ（ブランド発見は実行されない）
+        assert mock_llm.call.call_count == 1
+        assert result.total_stores == 50
+
+    def test_brands_included_in_prompt(self):
+        """ブランドリストがプロンプトに含まれることを検証"""
+        mock_llm = MagicMock()
+        investigator = StoreInvestigator(llm_client=mock_llm)
+
+        prompt = investigator._build_ai_prompt(
+            company_name="Z会",
+            official_url="https://www.zkai.co.jp/",
+            industry="学習塾",
+            current_year=2026,
+            brands=["Z会教室", "Z会進学教室"],
+        )
+
+        assert "Z会教室" in prompt
+        assert "Z会進学教室" in prompt
+        assert "関連ブランド・サービス名" in prompt
+
+
+# ====================================
 # InvestigationMode テスト
 # ====================================
 class TestInvestigationMode:
