@@ -22,7 +22,7 @@ rich==14.3.3
 
 # GUI
 streamlit==1.55.0
-pandas==3.0.1
+pandas==2.2.3
 
 # Excel出力（オプション）
 openpyxl==3.1.5
