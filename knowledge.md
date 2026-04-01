@@ -16,6 +16,17 @@
 - `st.session_state.setdefault()` で初期値制御（`value` パラメータ依存を排除）
 - `st.rerun()` / `pop()` / フラグ方式を全て廃止
 
+### 調査期間のユーザー指定 (v7.3)
+- サイドバーに「開始年」「開始月」の number_input を追加（デフォルト: 前年1月）
+- start_year / start_month を app → タブUI → investigator に伝搬
+- プロンプト内では `period_label = f"{sy}年{sm}月以降"` で動的生成
+- store_investigator は `self._start_year` 属性で受け渡し（investigate メソッドの引数ではなくインスタンス変数）
+
+### バージョン表記の一元化 (v7.3)
+- app_v5.py の page_title / st.title が v7.0 ハードコードのまま放置されていた
+- `core/constants.py` の `__version__` を f-string で参照する形に修正
+- バージョン変更は constants.py の1箇所のみで済む
+
 ### スクレイピング廃止 → AI 2段階チェック (v7.3)
 - スクレイピング（InvestigationMode.SCRAPING/HYBRID）を法的リスクのため廃止
 - Gemini AI がメイン調査、needs_verification 時に Perplexity で補助検証
@@ -73,4 +84,4 @@
 4行目ヘッダー形式、「サービス名」「事業者名」列を自動検出。
 
 ### Q: テストの実行方法は？
-`pytest tests/ -v` で全522件実行。カバレッジ付きは `pytest tests/ --cov=. --cov-report=html`。
+`pytest tests/ -v` で全518件実行。カバレッジ付きは `pytest tests/ --cov=. --cov-report=html`。
