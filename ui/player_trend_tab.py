@@ -34,6 +34,7 @@ from ui.common import (
     display_filter_multiselect,
     display_progress_log,
     display_verification_badge,
+    get_start_period,
     number_input_with_max,
     select_sheet_if_multiple,
 )
@@ -315,8 +316,9 @@ def _export_validation_results(results: list[ValidationResult]) -> bytes:
     return buffer.getvalue()
 
 
-def _render_validation_subtab(industry: str, definition: str, start_year: int = None, start_month: int = None) -> None:
+def _render_validation_subtab(industry: str, definition: str) -> None:
     """サブタブ 1: 変更点調査"""
+    start_year, start_month = get_start_period()
 
     st.markdown(
         "既存プレイヤーリストの**撤退・統合・名称変更**をGemini AIが自動検出します。"
@@ -435,8 +437,9 @@ def _render_validation_subtab(industry: str, definition: str, start_year: int = 
 # ====================================
 # サブタブ 2: 新規参入検出
 # ====================================
-def _render_newcomer_subtab(industry: str, definition: str, start_year: int = None, start_month: int = None) -> None:
+def _render_newcomer_subtab(industry: str, definition: str) -> None:
     """サブタブ 2: 新規参入検出"""
+    start_year, start_month = get_start_period()
 
     st.markdown(
         "既存プレイヤーリストにない**新規参入企業**をAIが自動検索します。"
@@ -878,16 +881,10 @@ def _render_compile_subtab() -> None:
 # ====================================
 # メインレンダリング
 # ====================================
-def render_player_trend_tab(industry: str, definition: str = "", start_year: int = None, start_month: int = None) -> None:
-    """プレイヤーの最新動向タブのUIをレンダリング
-
-    Args:
-        industry: 業界名
-        definition: 業界定義テキスト
-        start_year: 調査対象の開始年（None時は前年）
-        start_month: 調査対象の開始月（None時は1月）
-    """
+def render_player_trend_tab(industry: str, definition: str = "") -> None:
+    """プレイヤーの最新動向タブのUIをレンダリング"""
     _init_session_state()
+    start_year, start_month = get_start_period()
 
     # 共通: Excel アップロード（サブタブの前に配置）
     _render_shared_upload()
@@ -902,10 +899,10 @@ def render_player_trend_tab(industry: str, definition: str = "", start_year: int
     ])
 
     with tab_validation:
-        _render_validation_subtab(industry, definition, start_year=start_year, start_month=start_month)
+        _render_validation_subtab(industry, definition)
 
     with tab_newcomer:
-        _render_newcomer_subtab(industry, definition, start_year=start_year, start_month=start_month)
+        _render_newcomer_subtab(industry, definition)
 
     with tab_compile:
         _render_compile_subtab()

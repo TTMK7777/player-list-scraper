@@ -20,7 +20,7 @@ from core.excel_handler import ExcelHandler, StoreInvestigationExporter
 from core.llm_client import LLMClient, DEFAULT_MODEL
 from investigators.base import StoreInvestigationResult
 from investigators.store_investigator import StoreInvestigator
-from ui.common import display_progress_log, display_cost_estimate, display_actual_cost, select_sheet_if_multiple, number_input_with_max
+from ui.common import display_progress_log, display_cost_estimate, display_actual_cost, get_start_period, select_sheet_if_multiple, number_input_with_max
 
 
 # ====================================
@@ -205,8 +205,9 @@ def _display_company_detail(result: StoreInvestigationResult) -> None:
 # ====================================
 # メインレンダリング
 # ====================================
-def render_store_tab(start_year: int = None):
+def render_store_tab():
     """店舗調査タブのUIをレンダリング"""
+    start_year, _start_month = get_start_period()
 
     st.info("企業の**店舗・教室数**を都道府県別に調査します。Gemini AI + Perplexity の2段階チェックで取得します。")
     st.caption("🏪 店舗・教室調査（AI 2段階チェック）")

@@ -26,10 +26,10 @@ from core.llm_client import LLMClient
 from core.excel_handler import ExcelHandler
 from investigators.player_validator import PlayerValidator
 from investigators.base import AlertLevel, ValidationResult
-from ui.common import display_cost_estimate, select_sheet_if_multiple, number_input_with_max
+from ui.common import display_cost_estimate, get_start_period, select_sheet_if_multiple, number_input_with_max
 
 
-def render_workflow_tab(industry: str, definition: str = "", start_year: int = None, start_month: int = None):
+def render_workflow_tab(industry: str, definition: str = ""):
     """3段階チェックタブのUIをレンダリング"""
 
     st.subheader("3段階チェック体制")
@@ -193,6 +193,7 @@ def render_workflow_tab(industry: str, definition: str = "", start_year: int = N
         try:
             llm = LLMClient()
             validator = PlayerValidator(llm_client=llm)
+            start_year, start_month = get_start_period()
 
             results = run_async(validator.validate_batch(
                 target_players,
@@ -204,6 +205,7 @@ def render_workflow_tab(industry: str, definition: str = "", start_year: int = N
                 start_year=start_year,
                 start_month=start_month,
             ))
+
 
             # 記録保存 + 差分計算
             summary = {

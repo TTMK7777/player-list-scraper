@@ -458,8 +458,6 @@ def _render_investigation_section(
     batch_size: Optional[int],
     context: str,
     definition: str = "",
-    start_year: int = None,
-    start_month: int = None,
 ) -> None:
     """コスト概算・調査実行・進捗表示セクションをレンダリング。
 
@@ -538,8 +536,10 @@ def _render_investigation_section(
 
         try:
             llm = LLMClient()
+            from ui.common import get_start_period
+            _sy, _sm = get_start_period()
             inv = AttributeInvestigator(llm_client=llm)
-            inv._start_year = start_year or datetime.now().year
+            inv._start_year = _sy
 
             results = run_async(inv.investigate_batch(
                 players_to_check,
@@ -689,7 +689,7 @@ def _render_results_section(attributes: list[str]) -> None:
 # ---------------------------------------------------------------------------
 # メインレンダー関数（オーケストレーター）
 # ---------------------------------------------------------------------------
-def render_investigation_tab(industry: str, definition: str = "", start_year: int = None, start_month: int = None) -> None:
+def render_investigation_tab(industry: str, definition: str = "") -> None:
     """カテゴリチェック（汎用調査）タブのUIをレンダリング。
 
     テンプレート選択/管理 + プレイヤー入力 + 調査実行 + 結果表示の
@@ -718,7 +718,7 @@ def render_investigation_tab(industry: str, definition: str = "", start_year: in
     _render_player_input_section()
 
     # セクション3: コスト概算 & 調査実行
-    _render_investigation_section(industry, attributes, batch_size, context, definition=definition, start_year=start_year, start_month=start_month)
+    _render_investigation_section(industry, attributes, batch_size, context, definition=definition)
 
     # セクション4: 結果表示 + エクスポート
     _render_results_section(attributes)

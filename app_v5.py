@@ -255,7 +255,7 @@ def main():
         _default_year = _current_year - 1
         _col_y, _col_m = st.columns(2)
         with _col_y:
-            start_year = st.number_input(
+            st.number_input(
                 "開始年",
                 min_value=_current_year - 5,
                 max_value=_current_year,
@@ -264,7 +264,7 @@ def main():
                 key="global_start_year",
             )
         with _col_m:
-            start_month = st.number_input(
+            st.number_input(
                 "開始月",
                 min_value=1,
                 max_value=12,
@@ -299,13 +299,13 @@ def main():
     # 機能分岐（各タブモジュールに委譲）
     # ====================================
     if "最新動向" in function_type:
-        render_player_trend_tab(industry=industry, definition=definition, start_year=start_year, start_month=start_month)
+        render_player_trend_tab(industry=industry, definition=definition)
     elif "カテゴリチェック" in function_type:
-        render_investigation_tab(industry=industry, definition=definition, start_year=start_year, start_month=start_month)
+        render_investigation_tab(industry=industry, definition=definition)
     elif "店舗・教室調査" in function_type:
-        render_store_tab(start_year=start_year)
+        render_store_tab()
     elif "3段階チェック" in function_type:
-        render_workflow_tab(industry=industry, definition=definition, start_year=start_year, start_month=start_month)
+        render_workflow_tab(industry=industry, definition=definition)
 
     # デバッグログ表示
     render_debug_log()

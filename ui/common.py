@@ -23,6 +23,18 @@ from core.excel_handler import ExcelHandler
 USD_TO_JPY = 150
 
 
+def get_start_period() -> tuple[int, int]:
+    """サイドバーの調査期間設定を取得する。
+
+    Returns:
+        (start_year, start_month) のタプル。未設定時は (前年, 1)。
+    """
+    default_year = datetime.now().year - 1
+    sy = int(st.session_state.get("global_start_year", default_year))
+    sm = int(st.session_state.get("global_start_month", 1))
+    return sy, sm
+
+
 def display_progress_log(logs: list[str], container) -> None:
     """進捗ログを表示"""
     log_text = html.escape("\n".join(logs[-15:]))
