@@ -122,6 +122,7 @@ class PlayerValidator:
         company_name: str = "",
         industry: Optional[str] = None,
         definition: str = "",
+        start_year: Optional[int] = None,
     ) -> ValidationResult:
         """
         単一プレイヤーの正誤チェック
@@ -131,6 +132,7 @@ class PlayerValidator:
             official_url: 公式URL
             company_name: 運営会社名
             industry: 業界（クレジットカード、動画配信など）
+            start_year: 調査対象の開始年（None時は前年）
 
         Returns:
             ValidationResult: チェック結果
@@ -141,7 +143,8 @@ class PlayerValidator:
 
             # Step 2: LLMで最新情報を調査
             llm_response = await self._query_latest_info(
-                player_name, official_url, company_name, industry, definition
+                player_name, official_url, company_name, industry, definition,
+                start_year=start_year,
             )
 
             # Step 3: レスポンスを解析
@@ -175,6 +178,7 @@ class PlayerValidator:
         concurrency: Optional[int] = None,
         delay_seconds: float = 1.0,
         definition: str = "",
+        start_year: Optional[int] = None,
     ) -> list[ValidationResult]:
         """
         複数プレイヤーをバッチチェック
@@ -210,6 +214,7 @@ class PlayerValidator:
                     company_name=player.company_name,
                     industry=industry,
                     definition=definition,
+                    start_year=start_year,
                 )
 
             # API制限対策の遅延（セマフォ外）
@@ -246,6 +251,7 @@ class PlayerValidator:
         company_name: str,
         industry: Optional[str],
         definition: str = "",
+        start_year: Optional[int] = None,
     ) -> str:
         """LLMに最新情報を問い合わせ"""
 
@@ -261,6 +267,10 @@ class PlayerValidator:
         url_context = f"[公式URL] {safe_url}" if safe_url else ""
 
         current_year = datetime.now().year
+        # start_year 未指定時は前年（直近1年）
+        sy = start_year if start_year is not None else current_year - 1
+        # start_year の1年前を「背景情報」の境界とする
+        bg_cutoff = sy - 1
 
         prompt = f"""
 「{safe_player_name}」{industry_context}{company_context}の最新情報を調査してください。
@@ -268,16 +278,16 @@ class PlayerValidator:
 {url_context}
 
 【確認事項】
-1. サービスは現在も継続していますか？（{current_year - 1}年1月以降に撤退・終了していないか）
-2. サービス名の変更はありますか？（{current_year - 1}年1月以降のリブランディング等）
-3. 運営会社名の変更はありますか？（{current_year - 1}年1月以降の変更のみ）
-4. 公式URLは正しいですか？（{current_year - 1}年1月以降のリダイレクト・変更の有無）
-5. 統合・買収などの重大ニュースはありますか？（{current_year - 1}年1月以降）
+1. サービスは現在も継続していますか？（{sy}年1月以降に撤退・終了していないか）
+2. サービス名の変更はありますか？（{sy}年1月以降のリブランディング等）
+3. 運営会社名の変更はありますか？（{sy}年1月以降の変更のみ）
+4. 公式URLは正しいですか？（{sy}年1月以降のリダイレクト・変更の有無）
+5. 統合・買収などの重大ニュースはありますか？（{sy}年1月以降）
 
 【重要】
 - {current_year}年時点の最新情報を優先してください
-- {current_year - 2}年以前の統合・買収・社名変更は背景情報であり、change_type は "none" にしてください。変更として報告しないでください
-- news フィールドには直近1年以内（{current_year - 1}年1月以降）のイベントのみ記載してください。それ以前の情報は記載不要です
+- {bg_cutoff}年以前の統合・買収・社名変更は背景情報であり、change_type は "none" にしてください。変更として報告しないでください
+- {sy}年1月以降のイベントのみ news フィールドに記載してください。それ以前の情報は記載不要です
 - 公式サイト、プレスリリース、信頼できるニュースソースのみを参照
 - 撤退・サービス終了・統合などの場合は、公式告知ページやプレスリリースのURLを必ず sources に含めてください
 - 推測や古い情報は避けてください
@@ -317,7 +327,7 @@ class PlayerValidator:
 
 例4: 過去の合併（直近1年以外）がある場合
 {{"is_active": true, "change_type": "none", "confidence": 0.9, "changes": [], "news": ""}}
-（注: {current_year - 2}年以前の合併は背景情報のため change_type は "none"）
+（注: {bg_cutoff}年以前の合併は背景情報のため change_type は "none"）
 """
 
         # LLM呼び出し（同期を非同期でラップ、事実確認系は temperature=0.1 統一）

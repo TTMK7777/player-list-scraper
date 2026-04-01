@@ -126,6 +126,7 @@ async def _run_validation(
     definition: str,
     progress_container,
     status_container,
+    start_year: int = None,
 ) -> list[ValidationResult]:
     """正誤チェックを実行"""
 
@@ -148,6 +149,7 @@ async def _run_validation(
             definition=definition,
             on_progress=on_progress,
             delay_seconds=1.5,
+            start_year=start_year,
         )
 
         status_container.success(f"✅ チェック完了: {len(results)}件")
@@ -311,7 +313,7 @@ def _export_validation_results(results: list[ValidationResult]) -> bytes:
     return buffer.getvalue()
 
 
-def _render_validation_subtab(industry: str, definition: str) -> None:
+def _render_validation_subtab(industry: str, definition: str, start_year: int = None) -> None:
     """サブタブ 1: 変更点調査"""
 
     st.markdown(
@@ -368,6 +370,7 @@ def _render_validation_subtab(industry: str, definition: str) -> None:
                 players_to_check,
                 industry=industry_normalized,
                 definition=definition,
+                start_year=start_year,
                 progress_container=progress_container,
                 status_container=status_container,
             ))
@@ -429,7 +432,7 @@ def _render_validation_subtab(industry: str, definition: str) -> None:
 # ====================================
 # サブタブ 2: 新規参入検出
 # ====================================
-def _render_newcomer_subtab(industry: str, definition: str) -> None:
+def _render_newcomer_subtab(industry: str, definition: str, start_year: int = None) -> None:
     """サブタブ 2: 新規参入検出"""
 
     st.markdown(
@@ -498,6 +501,7 @@ def _render_newcomer_subtab(industry: str, definition: str) -> None:
                 existing_players=existing_names,
                 definition=definition,
                 on_progress=on_progress,
+                start_year=start_year,
             ))
 
             st.session_state.trend_newcomer_candidates = candidates
@@ -870,17 +874,13 @@ def _render_compile_subtab() -> None:
 # ====================================
 # メインレンダリング
 # ====================================
-def render_player_trend_tab(industry: str, definition: str = "") -> None:
+def render_player_trend_tab(industry: str, definition: str = "", start_year: int = None) -> None:
     """プレイヤーの最新動向タブのUIをレンダリング
-
-    3つのサブタブを統合:
-    1. 変更点調査 — 既存プレイヤーの撤退・統合・名称変更を検出
-    2. 新規参入検出 — 既存リストにない新規参入候補を提案
-    3. 最新版リスト作成 — 上記結果を統合した最新版リストを生成
 
     Args:
         industry: 業界名（例: "クレジットカード", "動画配信サービス"）
         definition: 業界定義テキスト（プレイヤーの判定基準）
+        start_year: 調査対象の開始年（None時は前年）
     """
     _init_session_state()
 
@@ -897,10 +897,10 @@ def render_player_trend_tab(industry: str, definition: str = "") -> None:
     ])
 
     with tab_validation:
-        _render_validation_subtab(industry, definition)
+        _render_validation_subtab(industry, definition, start_year=start_year)
 
     with tab_newcomer:
-        _render_newcomer_subtab(industry, definition)
+        _render_newcomer_subtab(industry, definition, start_year=start_year)
 
     with tab_compile:
         _render_compile_subtab()

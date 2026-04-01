@@ -107,6 +107,7 @@ class StoreInvestigator:
         industry: Optional[str] = None,
         mode: InvestigationMode = InvestigationMode.AI,
         on_progress: Optional[Callable[[str], None]] = None,
+        start_year: Optional[int] = None,
     ) -> StoreInvestigationResult:
         """
         店舗調査を実行
@@ -115,12 +116,14 @@ class StoreInvestigator:
             company_name: 調査対象の企業名
             official_url: 公式サイトURL（オプション）
             industry: 業界（オプション、調査精度向上用）
-            mode: 調査モード（AI / SCRAPING / HYBRID）
+            mode: 調査モード
             on_progress: 進捗コールバック
+            start_year: 調査対象の基準年（None時は当年）
 
         Returns:
             StoreInvestigationResult: 調査結果
         """
+        self._start_year = start_year
         def log(msg: str):
             if on_progress:
                 on_progress(msg)
@@ -162,7 +165,7 @@ class StoreInvestigator:
         log("AI調査を実行中...")
 
         llm = self._get_llm_client()
-        current_year = datetime.now().year
+        current_year = getattr(self, "_start_year", None) or datetime.now().year
         _already_retried_with_brands = False
 
         # プロンプト生成

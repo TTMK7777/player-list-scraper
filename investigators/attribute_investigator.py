@@ -247,7 +247,7 @@ class AttributeInvestigator:
             LLM用プロンプト文字列
         """
         safe_industry = sanitize_input(industry) if industry else ""
-        current_year = datetime.now().year
+        current_year = getattr(self, "_start_year", None) or datetime.now().year
 
         # プレイヤー一覧
         player_lines = []

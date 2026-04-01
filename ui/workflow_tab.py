@@ -29,7 +29,7 @@ from investigators.base import AlertLevel, ValidationResult
 from ui.common import display_cost_estimate, select_sheet_if_multiple, number_input_with_max
 
 
-def render_workflow_tab(industry: str, definition: str = ""):
+def render_workflow_tab(industry: str, definition: str = "", start_year: int = None):
     """3段階チェックタブのUIをレンダリング"""
 
     st.subheader("3段階チェック体制")
@@ -201,6 +201,7 @@ def render_workflow_tab(industry: str, definition: str = ""):
                 on_progress=on_progress,
                 concurrency=2,
                 delay_seconds=1.5,
+                start_year=start_year,
             ))
 
             # 記録保存 + 差分計算

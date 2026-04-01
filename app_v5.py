@@ -247,6 +247,23 @@ def main():
 
         st.divider()
 
+        # 調査期間設定（任意）
+        st.subheader("📅 調査期間")
+        from datetime import datetime as _dt
+        _current_year = _dt.now().year
+        start_year = st.number_input(
+            "情報の開始年",
+            min_value=_current_year - 5,
+            max_value=_current_year,
+            value=_current_year - 1,
+            step=1,
+            help="この年の1月以降の変更を調査対象とします",
+            key="global_start_year",
+        )
+        st.caption(f"⚙️ 任意設定です。デフォルトは直近1年（{_current_year - 1}年1月〜）")
+
+        st.divider()
+
     # ====================================
     # メインエリア: 機能選択
     # ====================================
@@ -270,13 +287,13 @@ def main():
     # 機能分岐（各タブモジュールに委譲）
     # ====================================
     if "最新動向" in function_type:
-        render_player_trend_tab(industry=industry, definition=definition)
+        render_player_trend_tab(industry=industry, definition=definition, start_year=start_year)
     elif "カテゴリチェック" in function_type:
-        render_investigation_tab(industry=industry, definition=definition)
+        render_investigation_tab(industry=industry, definition=definition, start_year=start_year)
     elif "店舗・教室調査" in function_type:
-        render_store_tab()
+        render_store_tab(start_year=start_year)
     elif "3段階チェック" in function_type:
-        render_workflow_tab(industry=industry, definition=definition)
+        render_workflow_tab(industry=industry, definition=definition, start_year=start_year)
 
     # デバッグログ表示
     render_debug_log()

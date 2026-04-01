@@ -236,7 +236,7 @@ class TestPlayerValidator:
         assert f'{current_year - 2}年以前' in prompt
         assert 'change_type は "none"' in prompt
         # news フィールドの期間制約が含まれることを確認
-        assert "news フィールドには直近1年以内" in prompt
+        assert "news フィールドに記載" in prompt
 
 
 class TestParseResponse:

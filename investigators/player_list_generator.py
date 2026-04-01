@@ -144,7 +144,7 @@ class PlayerListGenerator:
         safe_industry = sanitize_input(industry)
         safe_conditions = sanitize_input(conditions) if conditions else ""
 
-        current_year = datetime.now().year
+        current_year = getattr(self, "_start_year", None) or datetime.now().year
 
         # 条件セクション（attribute_investigatorのcontext注入パターンを採用）
         conditions_section = f"\n■絞り込み条件\n{safe_conditions}\n" if safe_conditions else ""

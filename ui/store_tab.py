@@ -30,6 +30,7 @@ async def _run_investigation(
     companies: list[dict],
     progress_container,
     status_container,
+    start_year: int = None,
 ) -> list[StoreInvestigationResult]:
     """店舗調査を実行"""
 
@@ -46,6 +47,7 @@ async def _run_investigation(
         # 店舗調査は短時間で変わらないのでキャッシュ有効
         llm = LLMClient(enable_cache=True)
         investigator = StoreInvestigator(llm_client=llm)
+        investigator._start_year = start_year
 
         results = await investigator.investigate_batch(
             companies,
@@ -203,7 +205,7 @@ def _display_company_detail(result: StoreInvestigationResult) -> None:
 # ====================================
 # メインレンダリング
 # ====================================
-def render_store_tab():
+def render_store_tab(start_year: int = None):
     """店舗調査タブのUIをレンダリング"""
 
     st.info("企業の**店舗・教室数**を都道府県別に調査します。Gemini AI + Perplexity の2段階チェックで取得します。")
@@ -364,6 +366,7 @@ def render_store_tab():
                 companies_to_check,
                 progress_container=progress_container,
                 status_container=status_container,
+                start_year=start_year,
             ))
 
             st.session_state.store_results = results
