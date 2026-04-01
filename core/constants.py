@@ -6,7 +6,7 @@
 バージョン情報とUser-Agent文字列を一元管理する。
 """
 
-__version__ = "7.2"
+__version__ = "7.3"
 
 TOOL_USER_AGENT = (
     f"OriconPlayerListScraper/{__version__} (+https://www.oricon.co.jp/)"

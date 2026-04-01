@@ -27,6 +27,7 @@ import streamlit as st
 # 自作モジュールのパスを追加
 sys.path.insert(0, str(Path(__file__).parent))
 
+from core.constants import __version__
 from core.logger import setup_logging
 from core.app_logger import setup_app_logging, render_debug_log
 from core.llm_client import is_api_available, DEFAULT_MODEL
@@ -42,7 +43,7 @@ from ui.workflow_tab import render_workflow_tab
 
 # ページ設定
 st.set_page_config(
-    page_title="プレイヤーリスト調査システム v7.0",
+    page_title=f"プレイヤーリスト調査システム v{__version__}",
     page_icon="🔍",
     layout="wide",
 )
@@ -200,7 +201,7 @@ def check_password() -> bool:
 # ====================================
 def main():
     check_password()
-    st.title("🔍 プレイヤーリスト調査システム v7.0")
+    st.title(f"🔍 プレイヤーリスト調査システム v{__version__}")
     st.caption("プレイヤーの最新動向 + カテゴリチェック + 店舗・教室調査 + 3段階チェック | AI調査（推奨）")
 
     # ====================================
