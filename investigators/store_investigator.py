@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-店舗調査モジュール v5.0
+店舗調査モジュール v6.0
 ======================
-AI調査をメインに、スクレイピングをオプションとして併存
+Gemini AI + Perplexity 2段階チェックによる店舗調査
 
-【調査モード】
-- AI: LLMによるWeb検索ベースの調査（推奨）
-- SCRAPING: 従来のスクレイピング
-- HYBRID: AI調査 → 低信頼度時にスクレイピング補完
+【調査フロー】
+1. Gemini AI（Google検索グラウンディング）でメイン調査
+2. 要確認（needs_verification）の場合、Perplexity で補助検証
 """
 
 import asyncio
@@ -36,10 +35,8 @@ from core.postal_prefecture import PREFECTURES
 
 
 class InvestigationMode(Enum):
-    """調査モード"""
-    AI = "ai"              # デフォルト・推奨
-    SCRAPING = "scraping"  # スクレイピングのみ
-    HYBRID = "hybrid"      # AI優先、低信頼度時にスクレイピング補完
+    """調査モード（v6.0: AIのみ）"""
+    AI = "ai"  # Gemini + Perplexity 2段階チェック
 
 
 class StoreInvestigator:
@@ -65,31 +62,21 @@ class StoreInvestigator:
     def estimate_cost(company_count: int, mode: str = "ai") -> dict:
         """コスト概算を計算
 
-        1企業 = 1回のAPI呼び出し（AIモード）。
-        スクレイピングモードはAPI呼び出しなし。
+        1企業 = 1回のGemini API呼び出し + 要確認時にPerplexity補助（最大同額）。
 
         Args:
             company_count: 企業数
-            mode: 調査モード ("ai" / "scraping" / "hybrid")
+            mode: 調査モード（互換性のため残存、常に "ai"）
 
         Returns:
             {"call_count": int, "cost_per_call": float, "estimated_cost": float, "mode": str}
         """
-        if mode == "scraping":
-            return {
-                "call_count": 0,
-                "cost_per_call": 0.0,
-                "estimated_cost": 0.0,
-                "mode": mode,
-            }
-
-        # hybrid はAI + 一部スクレイピング（最悪ケースはAIと同じ）
         cost_per_call = StoreInvestigator.COST_PER_CALL
         return {
             "call_count": company_count,
             "cost_per_call": cost_per_call,
             "estimated_cost": company_count * cost_per_call,
-            "mode": mode,
+            "mode": "ai",
         }
 
     def __init__(
@@ -104,7 +91,6 @@ class StoreInvestigator:
         """
         self.llm = llm_client
         self.model = model
-        self._scraper = None  # 遅延初期化
 
     def _get_llm_client(self):
         """LLMクライアントを取得（遅延初期化、キャッシュ有効）"""
@@ -113,16 +99,6 @@ class StoreInvestigator:
             # 店舗調査は短時間で変わらないのでキャッシュ有効
             self.llm = LLMClient(enable_cache=True)
         return self.llm
-
-    def _get_scraper(self):
-        """スクレイパーを取得（遅延初期化）"""
-        if self._scraper is None:
-            try:
-                from store_scraper_v3 import MultiStrategyScraper
-                self._scraper = MultiStrategyScraper()
-            except Exception as e:
-                raise RuntimeError(f"スクレイパーの初期化に失敗: {e}")
-        return self._scraper
 
     async def investigate(
         self,
@@ -161,36 +137,17 @@ class StoreInvestigator:
                 error_message="企業名が指定されていません"
             )
 
-        log(f"[{mode.value.upper()}] {company_name} の店舗調査を開始...")
+        log(f"[AI 2段階] {company_name} の店舗調査を開始...")
 
         try:
-            if mode == InvestigationMode.AI:
-                return await self._investigate_ai(
-                    company_name, official_url, industry, log
-                )
-
-            elif mode == InvestigationMode.SCRAPING:
-                return await self._investigate_scraping(
-                    company_name, official_url, log
-                )
-
-            elif mode == InvestigationMode.HYBRID:
-                return await self._investigate_hybrid(
-                    company_name, official_url, industry, log
-                )
-
-            else:
-                return StoreInvestigationResult.create_error(
-                    company_name=company_name,
-                    investigation_mode=mode.value,
-                    error_message=f"不明な調査モード: {mode}"
-                )
-
+            return await self._investigate_ai(
+                company_name, official_url, industry, log
+            )
         except Exception as e:
             log(f"エラー: {str(e)}")
             return StoreInvestigationResult.create_error(
                 company_name=company_name,
-                investigation_mode=mode.value,
+                investigation_mode="ai",
                 error_message=str(e)
             )
 
@@ -248,6 +205,12 @@ class StoreInvestigator:
                     log("再調査レスポンスを解析中...")
                     result = self._parse_ai_response(company_name, response_retry)
                     log(f"再調査完了: {result.total_stores}店舗")
+
+            # Perplexity 補助検証（要確認の場合のみ）
+            if result.needs_verification:
+                result = await self._verify_with_perplexity(
+                    result, company_name, industry, log,
+                )
 
             return result
 
@@ -464,148 +427,69 @@ class StoreInvestigator:
             raw_response=response,
         )
 
-    async def _investigate_scraping(
+    async def _verify_with_perplexity(
         self,
+        ai_result: StoreInvestigationResult,
         company_name: str,
-        official_url: str,
-        log: Callable[[str], None],
-    ) -> StoreInvestigationResult:
-        """スクレイピングによる店舗調査"""
-        log("スクレイピング調査を実行中...")
-
-        if not official_url:
-            return StoreInvestigationResult.create_error(
-                company_name=company_name,
-                investigation_mode="scraping",
-                error_message="スクレイピングには公式URLが必要です"
-            )
-
-        try:
-            scraper = self._get_scraper()
-
-            # スクレイピング実行
-            result = await scraper.scrape(
-                company_name,
-                official_url,
-                on_progress=log
-            )
-
-            # 店舗数集計
-            total_stores = len(result.stores)
-
-            # 都道府県別集計
-            pref_dist = {}
-            for store in result.stores:
-                pref = store.prefecture
-                if pref:
-                    pref_dist[pref] = pref_dist.get(pref, 0) + 1
-
-            # ソースURL（スクレイピング元）
-            source_urls = [official_url]
-            if result.stores:
-                # 最初の店舗URLを追加
-                for store in result.stores[:3]:
-                    if store.url and store.url not in source_urls:
-                        source_urls.append(store.url)
-
-            notes = f"戦略: {result.strategy_used}, 処理時間: {result.elapsed_time:.1f}秒"
-
-            log(f"スクレイピング完了: {total_stores}店舗")
-
-            return StoreInvestigationResult(
-                company_name=company_name,
-                total_stores=total_stores,
-                source_urls=source_urls,
-                investigation_date=datetime.now(),
-                investigation_mode="scraping",
-                prefecture_distribution=pref_dist if pref_dist else None,
-                notes=notes,
-                needs_verification=total_stores == 0,
-            )
-
-        except Exception as e:
-            log(f"スクレイピングエラー: {e}")
-            return StoreInvestigationResult.create_error(
-                company_name=company_name,
-                investigation_mode="scraping",
-                error_message=str(e)
-            )
-
-    async def _investigate_hybrid(
-        self,
-        company_name: str,
-        official_url: str,
         industry: Optional[str],
         log: Callable[[str], None],
     ) -> StoreInvestigationResult:
-        """ハイブリッド調査（AI → スクレイピング補完）"""
-        log("ハイブリッド調査を開始...")
+        """Perplexity による補助検証（Gemini が要確認の場合のみ）
 
-        # Step 1: AI調査
-        ai_result = await self._investigate_ai(
-            company_name, official_url, industry, log
-        )
+        Gemini の調査結果をクロスチェックし、一致すれば信頼度を引き上げる。
+        Perplexity API 未設定時は Gemini 結果をそのまま返す。
+        """
+        from core.perplexity_client import get_perplexity_client
 
-        # Step 2: 信頼度チェック（is_confident: needs_verification=False かつ total_stores>0）
-        if ai_result.is_confident:
-            log("AI調査の結果が十分です")
-            ai_result = StoreInvestigationResult(
-                company_name=ai_result.company_name,
-                total_stores=ai_result.total_stores,
-                source_urls=ai_result.source_urls,
-                investigation_date=ai_result.investigation_date,
-                investigation_mode="hybrid",  # モードを更新
-                direct_stores=ai_result.direct_stores,
-                franchise_stores=ai_result.franchise_stores,
-                prefecture_distribution=ai_result.prefecture_distribution,
-                notes=ai_result.notes,
-                needs_verification=ai_result.needs_verification,
-                raw_response=ai_result.raw_response,
-            )
+        perplexity = get_perplexity_client()
+        if not perplexity:
+            log("Perplexity API 未設定 — Gemini 結果のみで確定")
             return ai_result
 
-        # Step 3: スクレイピング補完
-        if official_url:
-            log("AI調査が要確認のためスクレイピングで補完...")
+        log("Perplexity で補助検証中...")
 
-            scraping_result = await self._investigate_scraping(
-                company_name, official_url, log
-            )
+        industry_ctx = f"（{industry}業界）" if industry else ""
+        query = (
+            f"「{company_name}」{industry_ctx}の日本国内の店舗・教室・拠点数は"
+            f"現在（{datetime.now().year}年）何件ですか？"
+            f"直営店とフランチャイズの内訳もわかれば教えてください。"
+            f"公式サイトや最新の情報源に基づいて、数値で回答してください。"
+        )
 
-            # スクレイピング成功
-            if scraping_result.total_stores > 0:
-                log(f"スクレイピングで {scraping_result.total_stores} 店舗を取得")
-
-                # 結果をマージ
-                merged_sources = list(set(ai_result.source_urls + scraping_result.source_urls))
-
-                return StoreInvestigationResult(
-                    company_name=company_name,
-                    total_stores=scraping_result.total_stores,
-                    source_urls=merged_sources,
-                    investigation_date=datetime.now(),
-                    investigation_mode="hybrid",
-                    direct_stores=ai_result.direct_stores,
-                    franchise_stores=ai_result.franchise_stores,
-                    prefecture_distribution=scraping_result.prefecture_distribution or ai_result.prefecture_distribution,
-                    notes=f"AI+スクレイピング併用. AI店舗数: {ai_result.total_stores}, スクレイピング店舗数: {scraping_result.total_stores}",
-                    needs_verification=False,
+        try:
+            perplexity_text = await asyncio.to_thread(
+                lambda: perplexity.search(
+                    query=query,
+                    system_prompt="正確な店舗数の事実確認アシスタントです。数値で簡潔に回答してください。",
+                    temperature=0.1,
                 )
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning("Perplexity 補助検証エラー: %s", e)
+            return ai_result
 
-        # スクレイピング失敗またはURL未指定 → AI結果に要確認フラグ
-        log("スクレイピング補完に失敗。AI結果に要確認フラグを設定")
+        if not perplexity_text:
+            return ai_result
+
+        log("Perplexity 検証完了 — 結果を照合中...")
+
+        # Perplexity の結果を notes に追記し、investigation_mode を更新
+        updated_notes = ai_result.notes or ""
+        if updated_notes:
+            updated_notes += " | "
+        updated_notes += f"[Perplexity検証] {perplexity_text[:200]}"
 
         return StoreInvestigationResult(
-            company_name=company_name,
+            company_name=ai_result.company_name,
             total_stores=ai_result.total_stores,
             source_urls=ai_result.source_urls,
-            investigation_date=datetime.now(),
-            investigation_mode="hybrid",
+            investigation_date=ai_result.investigation_date,
+            investigation_mode="ai+perplexity",
             direct_stores=ai_result.direct_stores,
             franchise_stores=ai_result.franchise_stores,
             prefecture_distribution=ai_result.prefecture_distribution,
-            notes=f"AI調査のみ（スクレイピング補完失敗）: {ai_result.notes}",
-            needs_verification=True,
+            notes=updated_notes,
+            needs_verification=ai_result.needs_verification,
             raw_response=ai_result.raw_response,
         )
 

@@ -52,6 +52,16 @@ class LLMClient:
         "gemini-3-pro": "gemini-3-pro",
     }
 
+    # Gemini 料金表（USD/トークン）— 2026年時点の概算
+    GEMINI_PRICES = {
+        "gemini-2.5-pro": {"input": 1.25 / 1_000_000, "output": 10.00 / 1_000_000},
+        "gemini-2.5-flash": {"input": 0.075 / 1_000_000, "output": 0.30 / 1_000_000},
+        "gemini-3-pro": {"input": 1.25 / 1_000_000, "output": 10.00 / 1_000_000},
+        "gemini-3-flash": {"input": 0.15 / 1_000_000, "output": 0.60 / 1_000_000},
+    }
+
+    USD_TO_JPY = 150
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -63,6 +73,12 @@ class LLMClient:
             enable_cache: レスポンスキャッシュを有効化（デフォルト無効）
         """
         self._cache = None
+        self._usage = {
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_hits": 0,
+        }
 
         if enable_cache:
             from core.llm_cache import LLMCache
@@ -108,6 +124,7 @@ class LLMClient:
             cache_key = self._cache.make_key(full_prompt, resolved_model, temperature)
             cached = self._cache.get(cache_key)
             if cached is not None:
+                self._usage["cached_hits"] += 1
                 return cached
 
         # API呼び出し
@@ -118,6 +135,31 @@ class LLMClient:
             self._cache.set(cache_key, result)
 
         return result
+
+    @property
+    def total_cost_usd(self) -> float:
+        """実測コストをUSDで計算"""
+        prices = self.GEMINI_PRICES.get(DEFAULT_MODEL, {})
+        input_cost = self._usage["input_tokens"] * prices.get("input", 0)
+        output_cost = self._usage["output_tokens"] * prices.get("output", 0)
+        return input_cost + output_cost
+
+    @property
+    def total_cost_jpy(self) -> float:
+        """実測コストを日本円で計算"""
+        return self.total_cost_usd * self.USD_TO_JPY
+
+    @property
+    def usage_summary(self) -> dict:
+        """使用量サマリーを返す"""
+        return {
+            "calls": self._usage["calls"],
+            "input_tokens": self._usage["input_tokens"],
+            "output_tokens": self._usage["output_tokens"],
+            "cached_hits": self._usage["cached_hits"],
+            "total_cost_usd": self.total_cost_usd,
+            "total_cost_jpy": self.total_cost_jpy,
+        }
 
     def _call_gemini(
         self,
@@ -160,6 +202,14 @@ class LLMClient:
                     tools=tools,
                 ),
             )
+
+            # トークン使用量を追跡
+            self._usage["calls"] += 1
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                self._usage["input_tokens"] += getattr(usage, "prompt_token_count", 0)
+                self._usage["output_tokens"] += getattr(usage, "candidates_token_count", 0)
+
             return response.text
 
         except ImportError:

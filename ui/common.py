@@ -52,7 +52,7 @@ def display_cost_estimate(
     cost_per_call: float,
     label: str = "API呼び出し",
 ) -> None:
-    """汎用コスト概算を表示
+    """汎用コスト概算を表示（実行前の推定）
 
     Args:
         call_count: API呼び出し回数
@@ -62,10 +62,30 @@ def display_cost_estimate(
     estimated_cost_usd = call_count * cost_per_call
     estimated_cost_jpy = estimated_cost_usd * USD_TO_JPY
     cost_per_call_jpy = cost_per_call * USD_TO_JPY
-    st.info(
-        f"推定コスト: 約{estimated_cost_jpy:.1f}円"
-        f"（{call_count}回 × {cost_per_call_jpy:.2f}円/{label}）"
+    st.warning(
+        f"💰 **推定コスト: 約{estimated_cost_jpy:.1f}円**"
+        f"（{call_count}件 × {cost_per_call_jpy:.2f}円/{label}）"
     )
+
+
+def display_actual_cost(llm_client) -> None:
+    """実行後の実測コストを表示
+
+    Args:
+        llm_client: LLMClient インスタンス（usage_summary プロパティを持つ）
+    """
+    summary = getattr(llm_client, "usage_summary", None)
+    if not summary or summary["calls"] == 0:
+        return
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("💰 実コスト", f"約{summary['total_cost_jpy']:.1f}円")
+    with col2:
+        st.metric("📊 API呼び出し", f"{summary['calls']}回")
+    with col3:
+        total_tokens = summary["input_tokens"] + summary["output_tokens"]
+        st.metric("📝 トークン数", f"{total_tokens:,}")
 
 
 def display_verification_badge(status: str) -> str:

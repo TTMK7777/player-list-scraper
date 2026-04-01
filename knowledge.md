@@ -16,6 +16,21 @@
 - `st.session_state.setdefault()` で初期値制御（`value` パラメータ依存を排除）
 - `st.rerun()` / `pop()` / フラグ方式を全て廃止
 
+### スクレイピング廃止 → AI 2段階チェック (v7.3)
+- スクレイピング（InvestigationMode.SCRAPING/HYBRID）を法的リスクのため廃止
+- Gemini AI がメイン調査、needs_verification 時に Perplexity で補助検証
+- store_scraper_v3.py は未削除だが、store_investigator からの参照は除去済み
+
+### LLMClient トークン追跡 (v7.3)
+- `_usage` dict で calls / input_tokens / output_tokens / cached_hits を追跡
+- `usage_summary` プロパティで実コスト (USD/JPY) を算出
+- google.genai の `response.usage_metadata` から取得
+
+### デバッグログUI (v7.3)
+- core/app_logger.py: StreamlitLogHandler → session_state.log_buffer (deque, 500行)
+- render_debug_log(): expander + st.code(language="log") + コピペ案内メッセージ
+- CS-creative-maker の実装パターンを踏襲
+
 ### 安全性・合法性フレームワーク (v7.2)
 - robots.txt自動準拠チェッカー（ドメインキャッシュ1h TTL）
 - ドメイン別レート制限（最小0.5秒間隔、asyncio.Lock）

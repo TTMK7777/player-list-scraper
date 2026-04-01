@@ -11,12 +11,18 @@
 - [ ] [E] カテゴリ値対応（boolean以外の多値分類）
 - [ ] [E] LLMClient の AsyncContextManager 化
 - [ ] [E] `player_trend_tab.py` のサブタブ分離ファイル化
-- [ ] [E] `store_scraper_v3.py` 1,550行を戦略別モジュールに分割
-- [ ] [E] `StaticHTMLStrategy` インスタンス毎回生成の改善
+- [ ] [E] `store_scraper_v3.py` は将来的に削除検討（スクレイピング廃止済み）
 - [ ] contextフィールドのサニタイズ強化
-- [ ] コミット＆プッシュ (v7.2)
+- [ ] コミット＆プッシュ (v7.2 + v7.3)
 
 ## 完了
+- [x] v7.3: デバッグログUI（StreamlitLogHandler + expander表示 + コピペ案内）
+- [x] v7.3: URLクリッカブル化（最新動向プレビュー → LinkColumn）
+- [x] v7.3: アラートURL拡充（公式告知・プレスリリースURL指示追加）
+- [x] v7.3: 「要確認のみ表示」フィルタ修正（CRITICAL/WARNING/要確認を対象に）
+- [x] v7.3: スクレイピング機能廃止 → Gemini+Perplexity 2段階AIチェック
+- [x] v7.3: 動的コスト算出（LLMClient トークン追跡）+ 目立つ表示（st.metric）
+- [x] ORICON-CS-DASHBOARD にもデバッグログUI追加（全4モード対応）
 - [x] v7.2: 安全性・合法性フレームワーク（robots.txt準拠、レート制限、監査ログ）
 - [x] v7.2: 最新動向の期間制約強化
 - [x] v7.2: 店舗調査2段階ブランド発見

@@ -28,11 +28,13 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.logger import setup_logging
+from core.app_logger import setup_app_logging, render_debug_log
 from core.llm_client import is_api_available, DEFAULT_MODEL
 from core.perplexity_client import is_perplexity_available
 
 # ロギング設定（モジュール読み込み時に1度だけ実行）
 setup_logging()
+setup_app_logging()
 from ui.attribute_tab import render_investigation_tab
 from ui.player_trend_tab import render_player_trend_tab
 from ui.store_tab import render_store_tab
@@ -274,6 +276,9 @@ def main():
         render_store_tab()
     elif "3段階チェック" in function_type:
         render_workflow_tab(industry=industry, definition=definition)
+
+    # デバッグログ表示
+    render_debug_log()
 
 
 if __name__ == "__main__":

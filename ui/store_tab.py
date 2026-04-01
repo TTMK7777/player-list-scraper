@@ -19,8 +19,8 @@ from core.async_helpers import run_async
 from core.excel_handler import ExcelHandler, StoreInvestigationExporter
 from core.llm_client import LLMClient, DEFAULT_MODEL
 from investigators.base import StoreInvestigationResult
-from investigators.store_investigator import StoreInvestigator, InvestigationMode
-from ui.common import display_progress_log, display_cost_estimate, select_sheet_if_multiple, number_input_with_max
+from investigators.store_investigator import StoreInvestigator
+from ui.common import display_progress_log, display_cost_estimate, display_actual_cost, select_sheet_if_multiple, number_input_with_max
 
 
 # ====================================
@@ -28,7 +28,6 @@ from ui.common import display_progress_log, display_cost_estimate, select_sheet_
 # ====================================
 async def _run_investigation(
     companies: list[dict],
-    mode: InvestigationMode,
     progress_container,
     status_container,
 ) -> list[StoreInvestigationResult]:
@@ -50,12 +49,12 @@ async def _run_investigation(
 
         results = await investigator.investigate_batch(
             companies,
-            mode=mode,
             on_progress=on_progress,
             delay_seconds=1.5,
         )
 
         status_container.success(f"✅ 調査完了: {len(results)}件")
+        st.session_state.store_last_llm = llm
         return results
 
     except Exception as e:
@@ -157,17 +156,6 @@ def _export_results(results: list[StoreInvestigationResult]) -> bytes:
     return buffer.getvalue()
 
 
-def _display_scraping_warning() -> None:
-    """スクレイピングモードの注意事項を表示"""
-    st.warning(
-        "**スクレイピングモードの注意事項**\n\n"
-        "- 対象サイトの利用規約を必ずご確認ください\n"
-        "- robots.txt で禁止されている場合は使用しないでください\n"
-        "- 本機能の使用による法的問題は利用者の責任となります\n"
-        "- 社内利用のみを推奨します（外部公開データへの使用は非推奨）"
-    )
-
-
 def _display_company_detail(result: StoreInvestigationResult) -> None:
     """企業別詳細を表示"""
     stores_display = result.total_stores or 0
@@ -218,8 +206,8 @@ def _display_company_detail(result: StoreInvestigationResult) -> None:
 def render_store_tab():
     """店舗調査タブのUIをレンダリング"""
 
-    st.info("企業の**店舗・教室数**を都道府県別に調査します。AI調査（推奨）またはスクレイピングで取得します。")
-    st.caption("🏪 店舗・教室調査")
+    st.info("企業の**店舗・教室数**を都道府県別に調査します。Gemini AI + Perplexity の2段階チェックで取得します。")
+    st.caption("🏪 店舗・教室調査（AI 2段階チェック）")
 
     # 業界設定（store調査のコンテキスト用）
     industry = st.text_input(
@@ -236,37 +224,6 @@ def render_store_tab():
         st.session_state.store_results = []
     if "store_is_running" not in st.session_state:
         st.session_state.store_is_running = False
-
-    st.subheader("🔧 調査モード選択")
-
-    mode_option = st.radio(
-        "調査モード",
-        [
-            "🤖 AI調査",
-            "🔗 スクレイピング",
-            "🔄 ハイブリッド（AI + スクレイピング補完）",
-        ],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
-    # モード変換
-    if "AI調査" in mode_option:
-        investigation_mode = InvestigationMode.AI
-    elif "スクレイピング" in mode_option:
-        investigation_mode = InvestigationMode.SCRAPING
-    else:
-        investigation_mode = InvestigationMode.HYBRID
-
-    # スクレイピング注意事項
-    scraping_consent = True  # AI調査モードではデフォルト同意
-    if investigation_mode in (InvestigationMode.SCRAPING, InvestigationMode.HYBRID):
-        _display_scraping_warning()
-        scraping_consent = st.checkbox(
-            "対象サイトの利用規約とrobots.txtを確認しました",
-            value=False,
-            key="store_scraping_consent",
-        )
 
     st.divider()
 
@@ -372,15 +329,14 @@ def render_store_tab():
         run_button = st.button(
             "🚀 店舗調査開始",
             type="primary",
-            disabled=not st.session_state.store_companies or st.session_state.store_is_running or not scraping_consent,
+            disabled=not st.session_state.store_companies or st.session_state.store_is_running,
             use_container_width=True,
             key="store_run_button",
         )
 
     # コスト概算表示
     if st.session_state.store_companies:
-        mode_str = investigation_mode.value
-        cost = StoreInvestigator.estimate_cost(check_limit, mode=mode_str)
+        cost = StoreInvestigator.estimate_cost(check_limit)
         if cost["estimated_cost"] > 0:
             display_cost_estimate(
                 call_count=cost["call_count"],
@@ -406,7 +362,6 @@ def render_store_tab():
         try:
             results = run_async(_run_investigation(
                 companies_to_check,
-                mode=investigation_mode,
                 progress_container=progress_container,
                 status_container=status_container,
             ))
@@ -420,6 +375,10 @@ def render_store_tab():
     # 結果表示
     if st.session_state.store_results:
         results = st.session_state.store_results
+
+        # 実コスト表示
+        if "store_last_llm" in st.session_state:
+            display_actual_cost(st.session_state.store_last_llm)
 
         _display_summary(results)
 

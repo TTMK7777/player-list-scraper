@@ -95,50 +95,6 @@ def mock_llm_client_error():
     return mock
 
 
-@pytest.fixture
-def mock_scraper_success():
-    """成功ケース用のモックスクレイパー"""
-    from store_scraper_v3 import ScrapingResult, StoreInfo
-
-    mock = MagicMock()
-    mock_result = ScrapingResult(
-        company_name="テスト株式会社",
-        url="https://www.example.co.jp/",
-        stores=[
-            StoreInfo(
-                company_name="テスト株式会社",
-                store_name="渋谷店",
-                address="東京都渋谷区道玄坂1-2-3",
-                phone="03-1234-5678",
-                prefecture="東京都",
-            ),
-            StoreInfo(
-                company_name="テスト株式会社",
-                store_name="新宿店",
-                address="東京都新宿区西新宿1-1-1",
-                phone="03-2345-6789",
-                prefecture="東京都",
-            ),
-            StoreInfo(
-                company_name="テスト株式会社",
-                store_name="梅田店",
-                address="大阪府大阪市北区梅田1-1-1",
-                phone="06-1234-5678",
-                prefecture="大阪府",
-            ),
-        ],
-        strategy_used="static_html",
-        pages_visited=5,
-        elapsed_time=10.5,
-        errors=[],
-    )
-
-    async def mock_scrape(*args, **kwargs):
-        return mock_result
-
-    mock.scrape = mock_scrape
-    return mock
-
 
 # ====================================
 # StoreInvestigationResult テスト
@@ -302,75 +258,6 @@ class TestStoreInvestigator:
         assert result.total_stores == 0
         assert result.needs_verification is True
         assert "エラー" in result.notes
-
-    @pytest.mark.asyncio
-    async def test_investigate_scraping_mode(self, mock_llm_client_success, mock_scraper_success):
-        """スクレイピングモードのテスト"""
-        investigator = StoreInvestigator(llm_client=mock_llm_client_success)
-        investigator._scraper = mock_scraper_success
-
-        result = await investigator.investigate(
-            company_name="テスト株式会社",
-            official_url="https://www.example.co.jp/",
-            mode=InvestigationMode.SCRAPING,
-        )
-
-        assert result.company_name == "テスト株式会社"
-        assert result.total_stores == 3
-        assert result.investigation_mode == "scraping"
-        assert "https://www.example.co.jp/" in result.source_urls
-        assert result.prefecture_distribution is not None
-        assert result.prefecture_distribution.get("東京都") == 2
-        assert result.prefecture_distribution.get("大阪府") == 1
-
-    @pytest.mark.asyncio
-    async def test_investigate_scraping_mode_no_url(self, mock_llm_client_success):
-        """スクレイピングモード（URL未指定）のテスト"""
-        investigator = StoreInvestigator(llm_client=mock_llm_client_success)
-
-        result = await investigator.investigate(
-            company_name="テスト株式会社",
-            official_url="",  # URL未指定
-            mode=InvestigationMode.SCRAPING,
-        )
-
-        assert result.total_stores == 0
-        assert result.needs_verification is True
-        assert "エラー" in result.notes
-
-    @pytest.mark.asyncio
-    async def test_investigate_hybrid_mode_high_confidence(self, mock_llm_client_success):
-        """ハイブリッドモード（AI高信頼度）のテスト"""
-        investigator = StoreInvestigator(llm_client=mock_llm_client_success)
-
-        result = await investigator.investigate(
-            company_name="テスト株式会社",
-            official_url="https://www.example.co.jp/",
-            mode=InvestigationMode.HYBRID,
-        )
-
-        # AI調査の信頼度が高いのでスクレイピングは実行されない
-        assert result.total_stores == 150
-        assert result.investigation_mode == "hybrid"
-
-    @pytest.mark.asyncio
-    async def test_investigate_hybrid_mode_low_confidence(
-        self, mock_llm_client_low_confidence, mock_scraper_success
-    ):
-        """ハイブリッドモード（AI低信頼度→スクレイピング補完）のテスト"""
-        investigator = StoreInvestigator(llm_client=mock_llm_client_low_confidence)
-        investigator._scraper = mock_scraper_success
-
-        result = await investigator.investigate(
-            company_name="テスト株式会社",
-            official_url="https://www.example.co.jp/",
-            mode=InvestigationMode.HYBRID,
-        )
-
-        # スクレイピングで補完される
-        assert result.total_stores == 3  # スクレイピング結果
-        assert result.investigation_mode == "hybrid"
-        assert "AI+スクレイピング" in result.notes
 
     @pytest.mark.asyncio
     async def test_investigate_empty_company_name(self, mock_llm_client_success):
@@ -676,11 +563,7 @@ class TestInvestigationMode:
     def test_mode_values(self):
         """モード値のテスト"""
         assert InvestigationMode.AI.value == "ai"
-        assert InvestigationMode.SCRAPING.value == "scraping"
-        assert InvestigationMode.HYBRID.value == "hybrid"
 
     def test_mode_from_string(self):
         """文字列からモード変換のテスト"""
         assert InvestigationMode("ai") == InvestigationMode.AI
-        assert InvestigationMode("scraping") == InvestigationMode.SCRAPING
-        assert InvestigationMode("hybrid") == InvestigationMode.HYBRID

@@ -29,6 +29,7 @@ from investigators.base import (
 from investigators.newcomer_detector import NewcomerDetector
 from investigators.player_validator import PlayerValidator
 from ui.common import (
+    display_actual_cost,
     display_cost_estimate,
     display_filter_multiselect,
     display_progress_log,
@@ -150,6 +151,7 @@ async def _run_validation(
         )
 
         status_container.success(f"✅ チェック完了: {len(results)}件")
+        st.session_state.trend_val_last_llm = llm
         return results
 
     except Exception as e:
@@ -203,16 +205,23 @@ def _display_validation_table(results: list[ValidationResult]) -> None:
         )
 
     with col_filter2:
-        show_manual_only = st.checkbox(
-            "要確認のみ表示",
+        show_attention_only = st.checkbox(
+            "対応が必要なもののみ表示",
             value=False,
             key="trend_val_filter_manual",
+        )
+
+    def _needs_attention(r: ValidationResult) -> bool:
+        """CRITICAL/WARNING/要確認のいずれかに該当"""
+        return (
+            r.alert_level in (AlertLevel.CRITICAL, AlertLevel.WARNING)
+            or r.needs_manual_review
         )
 
     filtered_results = [
         r for r in results
         if r.alert_level.value in selected_alerts
-        and (not show_manual_only or r.needs_manual_review)
+        and (not show_attention_only or _needs_attention(r))
     ]
 
     st.caption(f"表示中: {len(filtered_results)} / {len(results)} 件")
@@ -236,6 +245,8 @@ def _display_validation_table(results: list[ValidationResult]) -> None:
             "プレイヤー名（現在）": result.player_name_current,
             "変更タイプ": result.change_type.value,
             "変更内容": " / ".join(result.change_details) if result.change_details else "-",
+            "公式URL": result.url_current or result.url_original or "",
+            "情報ソース": result.source_urls[0] if result.source_urls else "",
             "要確認": "⚠️" if result.needs_manual_review else "",
         })
 
@@ -251,6 +262,8 @@ def _display_validation_table(results: list[ValidationResult]) -> None:
             "プレイヤー名（現在）": st.column_config.TextColumn("プレイヤー名（現在）", width="medium"),
             "変更タイプ": st.column_config.TextColumn("変更タイプ", width="small"),
             "変更内容": st.column_config.TextColumn("変更内容", width="large"),
+            "公式URL": st.column_config.LinkColumn("公式URL", width="medium", display_text="開く"),
+            "情報ソース": st.column_config.LinkColumn("情報ソース", width="medium", display_text="開く"),
             "要確認": st.column_config.TextColumn("要確認", width="small"),
         },
     )
@@ -368,6 +381,10 @@ def _render_validation_subtab(industry: str, definition: str) -> None:
     # 結果表示
     if st.session_state.trend_val_results:
         results = st.session_state.trend_val_results
+
+        # 実コスト表示
+        if "trend_val_last_llm" in st.session_state:
+            display_actual_cost(st.session_state.trend_val_last_llm)
 
         _display_validation_summary(results)
 
