@@ -251,16 +251,28 @@ def main():
         st.subheader("📅 調査期間")
         from datetime import datetime as _dt
         _current_year = _dt.now().year
-        start_year = st.number_input(
-            "情報の開始年",
-            min_value=_current_year - 5,
-            max_value=_current_year,
-            value=_current_year - 1,
-            step=1,
-            help="この年の1月以降の変更を調査対象とします",
-            key="global_start_year",
-        )
-        st.caption(f"⚙️ 任意設定です。デフォルトは直近1年（{_current_year - 1}年1月〜）")
+        _current_month = _dt.now().month
+        _default_year = _current_year - 1
+        _col_y, _col_m = st.columns(2)
+        with _col_y:
+            start_year = st.number_input(
+                "開始年",
+                min_value=_current_year - 5,
+                max_value=_current_year,
+                value=_default_year,
+                step=1,
+                key="global_start_year",
+            )
+        with _col_m:
+            start_month = st.number_input(
+                "開始月",
+                min_value=1,
+                max_value=12,
+                value=1,
+                step=1,
+                key="global_start_month",
+            )
+        st.caption(f"⚙️ 任意設定です。デフォルトは直近1年（{_default_year}年1月〜）")
 
         st.divider()
 
@@ -287,13 +299,13 @@ def main():
     # 機能分岐（各タブモジュールに委譲）
     # ====================================
     if "最新動向" in function_type:
-        render_player_trend_tab(industry=industry, definition=definition, start_year=start_year)
+        render_player_trend_tab(industry=industry, definition=definition, start_year=start_year, start_month=start_month)
     elif "カテゴリチェック" in function_type:
-        render_investigation_tab(industry=industry, definition=definition, start_year=start_year)
+        render_investigation_tab(industry=industry, definition=definition, start_year=start_year, start_month=start_month)
     elif "店舗・教室調査" in function_type:
         render_store_tab(start_year=start_year)
     elif "3段階チェック" in function_type:
-        render_workflow_tab(industry=industry, definition=definition, start_year=start_year)
+        render_workflow_tab(industry=industry, definition=definition, start_year=start_year, start_month=start_month)
 
     # デバッグログ表示
     render_debug_log()

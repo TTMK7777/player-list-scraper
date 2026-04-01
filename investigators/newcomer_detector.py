@@ -109,6 +109,7 @@ class NewcomerDetector:
         on_progress: Optional[Callable] = None,
         definition: str = "",
         start_year: Optional[int] = None,
+        start_month: Optional[int] = None,
     ) -> list[NewcomerCandidate]:
         """
         新規参入候補を検出
@@ -129,7 +130,7 @@ class NewcomerDetector:
             on_progress(1, total_steps, "LLMに問い合わせ中...")
 
         # Step 1: LLMに問い合わせ
-        candidates = await self._query_newcomers(industry, existing_players, definition=definition, start_year=start_year)
+        candidates = await self._query_newcomers(industry, existing_players, definition=definition, start_year=start_year, start_month=start_month)
 
         # Step 2 (optional): Perplexity クロスバリデーション
         if has_perplexity and candidates:
@@ -175,6 +176,7 @@ class NewcomerDetector:
         existing_players: list[str],
         definition: str = "",
         start_year: Optional[int] = None,
+        start_month: Optional[int] = None,
     ) -> list[NewcomerCandidate]:
         """LLMに新規参入候補を問い合わせ"""
 
@@ -185,6 +187,8 @@ class NewcomerDetector:
 
         current_year = datetime.now().year
         sy = start_year if start_year is not None else current_year - 1
+        sm = start_month if start_month is not None else 1
+        period_label = f"{sy}年{sm}月以降"
         existing_text = "\n".join(f"- {p}" for p in safe_players)
 
         definition_section = f"\n【業界定義・範囲】\n{sanitize_input(definition)}\n" if definition else ""
@@ -196,7 +200,7 @@ class NewcomerDetector:
 {existing_text}
 
 【時間スコープ】
-- 「新規参入」= {sy}年1月以降にサービスを開始したプレイヤー
+- 「新規参入」= {period_label}にサービスを開始したプレイヤー
 - {sy - 1}年以前の開始は「既存」扱い。含めないこと
 - 既にサービス終了・撤退済みのプレイヤーは除外
 

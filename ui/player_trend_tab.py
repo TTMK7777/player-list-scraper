@@ -127,6 +127,7 @@ async def _run_validation(
     progress_container,
     status_container,
     start_year: int = None,
+    start_month: int = None,
 ) -> list[ValidationResult]:
     """正誤チェックを実行"""
 
@@ -150,6 +151,7 @@ async def _run_validation(
             on_progress=on_progress,
             delay_seconds=1.5,
             start_year=start_year,
+            start_month=start_month,
         )
 
         status_container.success(f"✅ チェック完了: {len(results)}件")
@@ -313,7 +315,7 @@ def _export_validation_results(results: list[ValidationResult]) -> bytes:
     return buffer.getvalue()
 
 
-def _render_validation_subtab(industry: str, definition: str, start_year: int = None) -> None:
+def _render_validation_subtab(industry: str, definition: str, start_year: int = None, start_month: int = None) -> None:
     """サブタブ 1: 変更点調査"""
 
     st.markdown(
@@ -371,6 +373,7 @@ def _render_validation_subtab(industry: str, definition: str, start_year: int = 
                 industry=industry_normalized,
                 definition=definition,
                 start_year=start_year,
+                start_month=start_month,
                 progress_container=progress_container,
                 status_container=status_container,
             ))
@@ -432,7 +435,7 @@ def _render_validation_subtab(industry: str, definition: str, start_year: int = 
 # ====================================
 # サブタブ 2: 新規参入検出
 # ====================================
-def _render_newcomer_subtab(industry: str, definition: str, start_year: int = None) -> None:
+def _render_newcomer_subtab(industry: str, definition: str, start_year: int = None, start_month: int = None) -> None:
     """サブタブ 2: 新規参入検出"""
 
     st.markdown(
@@ -502,6 +505,7 @@ def _render_newcomer_subtab(industry: str, definition: str, start_year: int = No
                 definition=definition,
                 on_progress=on_progress,
                 start_year=start_year,
+                start_month=start_month,
             ))
 
             st.session_state.trend_newcomer_candidates = candidates
@@ -874,13 +878,14 @@ def _render_compile_subtab() -> None:
 # ====================================
 # メインレンダリング
 # ====================================
-def render_player_trend_tab(industry: str, definition: str = "", start_year: int = None) -> None:
+def render_player_trend_tab(industry: str, definition: str = "", start_year: int = None, start_month: int = None) -> None:
     """プレイヤーの最新動向タブのUIをレンダリング
 
     Args:
-        industry: 業界名（例: "クレジットカード", "動画配信サービス"）
-        definition: 業界定義テキスト（プレイヤーの判定基準）
+        industry: 業界名
+        definition: 業界定義テキスト
         start_year: 調査対象の開始年（None時は前年）
+        start_month: 調査対象の開始月（None時は1月）
     """
     _init_session_state()
 
@@ -897,10 +902,10 @@ def render_player_trend_tab(industry: str, definition: str = "", start_year: int
     ])
 
     with tab_validation:
-        _render_validation_subtab(industry, definition, start_year=start_year)
+        _render_validation_subtab(industry, definition, start_year=start_year, start_month=start_month)
 
     with tab_newcomer:
-        _render_newcomer_subtab(industry, definition, start_year=start_year)
+        _render_newcomer_subtab(industry, definition, start_year=start_year, start_month=start_month)
 
     with tab_compile:
         _render_compile_subtab()
